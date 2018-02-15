@@ -218,7 +218,7 @@ DIST_SUBDIRS = include oc2 h5_test libdispatch libsrc libsrc4 libdap2 \
 am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/config.h.in \
 	$(srcdir)/libnetcdf.settings.in $(srcdir)/nc-config.in \
 	$(srcdir)/netcdf.pc.in $(srcdir)/postinstall.sh.in compile \
-	config.guess config.sub install-sh ltmain.sh missing
+	config.guess config.sub depcomp install-sh ltmain.sh missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -421,6 +421,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@

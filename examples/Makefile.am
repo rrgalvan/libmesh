@@ -1,4 +1,5 @@
 SUBDIRS = \
+	keller_segel/keller_segel_ex1 \
 	introduction/introduction_ex1 \
 	introduction/introduction_ex2 \
 	introduction/introduction_ex3 \
