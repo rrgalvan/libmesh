@@ -1,0 +1,15 @@
+# Subintervals for mesh building
+n_mesh_intervals = 30
+
+# Finite elements
+#fe_family = LAGRANGE # Not valid for order>2
+#fe_family = BERNSTEIN # Bernstein (positive) basis
+fe_family = HIERARCHIC # Lobatto basis
+fe_order = 1
+
+# Time
+delta_t = 0.0001
+n_time_steps = 10
+
+# Time steps for saving to exodus file
+save_n_steps = 10
