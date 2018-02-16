@@ -1100,7 +1100,6 @@ infodir
 docdir
 oldincludedir
 includedir
-runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -1330,7 +1329,6 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
-runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -1583,15 +1581,6 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
-  -runstatedir | --runstatedir | --runstatedi | --runstated \
-  | --runstate | --runstat | --runsta | --runst | --runs \
-  | --run | --ru | --r)
-    ac_prev=runstatedir ;;
-  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
-  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
-  | --run=* | --ru=* | --r=*)
-    runstatedir=$ac_optarg ;;
-
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1729,7 +1718,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir runstatedir
+		libdir localedir mandir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1882,7 +1871,6 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
-  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -41143,7 +41131,7 @@ $as_echo "#define BUILD_DATE __DATE__ \" \" __TIME__" >>confdefs.h
 
 # Each example gets a makefile
 if (test "x$enableexamples" = "xyes"); then
-   ac_config_files="$ac_config_files examples/keller_segel/keller_segel_ex1/Makefile examples/introduction/introduction_ex1/Makefile examples/introduction/introduction_ex2/Makefile examples/introduction/introduction_ex3/Makefile examples/introduction/introduction_ex4/Makefile examples/introduction/introduction_ex5/Makefile examples/adaptivity/adaptivity_ex1/Makefile examples/adaptivity/adaptivity_ex2/Makefile examples/adaptivity/adaptivity_ex3/Makefile examples/adaptivity/adaptivity_ex4/Makefile examples/adaptivity/adaptivity_ex5/Makefile examples/adjoints/adjoints_ex1/Makefile examples/adjoints/adjoints_ex2/Makefile examples/adjoints/adjoints_ex3/Makefile examples/adjoints/adjoints_ex4/Makefile examples/adjoints/adjoints_ex5/Makefile examples/adjoints/adjoints_ex6/Makefile examples/eigenproblems/eigenproblems_ex1/Makefile examples/eigenproblems/eigenproblems_ex2/Makefile examples/eigenproblems/eigenproblems_ex3/Makefile examples/fem_system/fem_system_ex1/Makefile examples/fem_system/fem_system_ex2/Makefile examples/fem_system/fem_system_ex3/Makefile examples/fem_system/fem_system_ex4/Makefile examples/solution_transfer/solution_transfer_ex1/Makefile examples/miscellaneous/miscellaneous_ex1/Makefile examples/miscellaneous/miscellaneous_ex2/Makefile examples/miscellaneous/miscellaneous_ex3/Makefile examples/miscellaneous/miscellaneous_ex4/Makefile examples/miscellaneous/miscellaneous_ex5/Makefile examples/miscellaneous/miscellaneous_ex6/Makefile examples/miscellaneous/miscellaneous_ex7/Makefile examples/miscellaneous/miscellaneous_ex8/Makefile examples/miscellaneous/miscellaneous_ex9/Makefile examples/miscellaneous/miscellaneous_ex10/Makefile examples/miscellaneous/miscellaneous_ex11/Makefile examples/miscellaneous/miscellaneous_ex12/Makefile examples/miscellaneous/miscellaneous_ex13/Makefile examples/miscellaneous/miscellaneous_ex14/Makefile examples/optimization/optimization_ex1/Makefile examples/optimization/optimization_ex2/Makefile examples/subdomains/subdomains_ex1/Makefile examples/subdomains/subdomains_ex2/Makefile examples/subdomains/subdomains_ex3/Makefile examples/systems_of_equations/systems_of_equations_ex1/Makefile examples/systems_of_equations/systems_of_equations_ex2/Makefile examples/systems_of_equations/systems_of_equations_ex3/Makefile examples/systems_of_equations/systems_of_equations_ex4/Makefile examples/systems_of_equations/systems_of_equations_ex5/Makefile examples/systems_of_equations/systems_of_equations_ex6/Makefile examples/systems_of_equations/systems_of_equations_ex7/Makefile examples/systems_of_equations/systems_of_equations_ex8/Makefile examples/reduced_basis/reduced_basis_ex1/Makefile examples/reduced_basis/reduced_basis_ex2/Makefile examples/reduced_basis/reduced_basis_ex3/Makefile examples/reduced_basis/reduced_basis_ex4/Makefile examples/reduced_basis/reduced_basis_ex5/Makefile examples/reduced_basis/reduced_basis_ex6/Makefile examples/reduced_basis/reduced_basis_ex7/Makefile examples/transient/transient_ex1/Makefile examples/transient/transient_ex2/Makefile examples/vector_fe/vector_fe_ex1/Makefile examples/vector_fe/vector_fe_ex2/Makefile examples/vector_fe/vector_fe_ex3/Makefile examples/vector_fe/vector_fe_ex4/Makefile examples/Makefile"
+   ac_config_files="$ac_config_files examples/keller_segel/keller_segel_ex1/Makefile examples/keller_segel/keller_segel_ex2/Makefile examples/introduction/introduction_ex1/Makefile examples/introduction/introduction_ex2/Makefile examples/introduction/introduction_ex3/Makefile examples/introduction/introduction_ex4/Makefile examples/introduction/introduction_ex5/Makefile examples/adaptivity/adaptivity_ex1/Makefile examples/adaptivity/adaptivity_ex2/Makefile examples/adaptivity/adaptivity_ex3/Makefile examples/adaptivity/adaptivity_ex4/Makefile examples/adaptivity/adaptivity_ex5/Makefile examples/adjoints/adjoints_ex1/Makefile examples/adjoints/adjoints_ex2/Makefile examples/adjoints/adjoints_ex3/Makefile examples/adjoints/adjoints_ex4/Makefile examples/adjoints/adjoints_ex5/Makefile examples/adjoints/adjoints_ex6/Makefile examples/eigenproblems/eigenproblems_ex1/Makefile examples/eigenproblems/eigenproblems_ex2/Makefile examples/eigenproblems/eigenproblems_ex3/Makefile examples/fem_system/fem_system_ex1/Makefile examples/fem_system/fem_system_ex2/Makefile examples/fem_system/fem_system_ex3/Makefile examples/fem_system/fem_system_ex4/Makefile examples/solution_transfer/solution_transfer_ex1/Makefile examples/miscellaneous/miscellaneous_ex1/Makefile examples/miscellaneous/miscellaneous_ex2/Makefile examples/miscellaneous/miscellaneous_ex3/Makefile examples/miscellaneous/miscellaneous_ex4/Makefile examples/miscellaneous/miscellaneous_ex5/Makefile examples/miscellaneous/miscellaneous_ex6/Makefile examples/miscellaneous/miscellaneous_ex7/Makefile examples/miscellaneous/miscellaneous_ex8/Makefile examples/miscellaneous/miscellaneous_ex9/Makefile examples/miscellaneous/miscellaneous_ex10/Makefile examples/miscellaneous/miscellaneous_ex11/Makefile examples/miscellaneous/miscellaneous_ex12/Makefile examples/miscellaneous/miscellaneous_ex13/Makefile examples/miscellaneous/miscellaneous_ex14/Makefile examples/optimization/optimization_ex1/Makefile examples/optimization/optimization_ex2/Makefile examples/subdomains/subdomains_ex1/Makefile examples/subdomains/subdomains_ex2/Makefile examples/subdomains/subdomains_ex3/Makefile examples/systems_of_equations/systems_of_equations_ex1/Makefile examples/systems_of_equations/systems_of_equations_ex2/Makefile examples/systems_of_equations/systems_of_equations_ex3/Makefile examples/systems_of_equations/systems_of_equations_ex4/Makefile examples/systems_of_equations/systems_of_equations_ex5/Makefile examples/systems_of_equations/systems_of_equations_ex6/Makefile examples/systems_of_equations/systems_of_equations_ex7/Makefile examples/systems_of_equations/systems_of_equations_ex8/Makefile examples/reduced_basis/reduced_basis_ex1/Makefile examples/reduced_basis/reduced_basis_ex2/Makefile examples/reduced_basis/reduced_basis_ex3/Makefile examples/reduced_basis/reduced_basis_ex4/Makefile examples/reduced_basis/reduced_basis_ex5/Makefile examples/reduced_basis/reduced_basis_ex6/Makefile examples/reduced_basis/reduced_basis_ex7/Makefile examples/transient/transient_ex1/Makefile examples/transient/transient_ex2/Makefile examples/vector_fe/vector_fe_ex1/Makefile examples/vector_fe/vector_fe_ex2/Makefile examples/vector_fe/vector_fe_ex3/Makefile examples/vector_fe/vector_fe_ex4/Makefile examples/Makefile"
 
 fi
 
@@ -42854,6 +42842,7 @@ do
     "contrib/fparser/extrasrc/Makefile") CONFIG_FILES="$CONFIG_FILES contrib/fparser/extrasrc/Makefile" ;;
     "contrib/nanoflann/Makefile") CONFIG_FILES="$CONFIG_FILES contrib/nanoflann/Makefile" ;;
     "examples/keller_segel/keller_segel_ex1/Makefile") CONFIG_FILES="$CONFIG_FILES examples/keller_segel/keller_segel_ex1/Makefile" ;;
+    "examples/keller_segel/keller_segel_ex2/Makefile") CONFIG_FILES="$CONFIG_FILES examples/keller_segel/keller_segel_ex2/Makefile" ;;
     "examples/introduction/introduction_ex1/Makefile") CONFIG_FILES="$CONFIG_FILES examples/introduction/introduction_ex1/Makefile" ;;
     "examples/introduction/introduction_ex2/Makefile") CONFIG_FILES="$CONFIG_FILES examples/introduction/introduction_ex2/Makefile" ;;
     "examples/introduction/introduction_ex3/Makefile") CONFIG_FILES="$CONFIG_FILES examples/introduction/introduction_ex3/Makefile" ;;
