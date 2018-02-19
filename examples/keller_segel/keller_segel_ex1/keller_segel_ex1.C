@@ -102,7 +102,7 @@ Number initial_value_v(const Point& p,
 			const std::string&)
 {
   Number x=p(0), y=p(1);
-  return 0.55*exp(-x*x-y*y)*pow(4-x*x,2)*pow(4-y*x,2);
+  return 0.55*exp(-x*x-y*y)*pow(4-x*x,2)*pow(4-y*y,2);
   // return 0;
 }
 
@@ -134,13 +134,15 @@ int main (int argc, char ** argv)
   infile.parse_command_line(argc, argv);
 
   // Read in parameters from the input file
-  const unsigned int n_mesh_intervals = infile("n_mesh_intervals", 20);
-  const Real dt              = infile("delta_t", 0.0001);
-  const unsigned int n_time_steps   = infile("n_time_steps", 5);
+  const unsigned int n_mesh_intervals = infile("nx", 20);
+  const Real dt              = infile("dt", 0.0001);
+  const unsigned int n_time_steps   = infile("nt", 5);
   const unsigned int save_n_steps   = infile("save_n_steps", 10);
-  const unsigned int fe_order   = infile("fe_order", 1);
-  std::string fe_family_str = infile("fe_family", std::string("LAGRANGE"));
+  const unsigned int fe_order   = infile("order", 1);
+  std::string fe_family_str = infile("family", std::string("LAGRANGE"));
   FEFamily fe_family = Utility::string_to_enum<FEFamily>(fe_family_str);
+
+  infile.print(std::cout);
 
   // Read the mesh from file.  This is the coarse mesh that will be used
   // in example 10 to demonstrate adaptive mesh refinement.  Here we will
@@ -216,11 +218,11 @@ int main (int argc, char ** argv)
   // the flow velocity.  We will specify it as a RealVectorValue
   // data type and then use the Parameters object to pass it to
   // the assemble function.
-  equation_systems.parameters.set<Real>("c_u0") = 1.0;
-  equation_systems.parameters.set<Real>("c_u1") = 0.2;
-  equation_systems.parameters.set<Real>("c_v0") = 1.0;
-  equation_systems.parameters.set<Real>("c_v1") = 0.1;
-  equation_systems.parameters.set<Real>("c_v2") = 1.0;
+  equation_systems.parameters.set<Real>("c_u1") = 1.0;
+  equation_systems.parameters.set<Real>("c_u2") = 0.2;
+  equation_systems.parameters.set<Real>("c_v1") = 1.0;
+  equation_systems.parameters.set<Real>("c_v2") = 0.1;
+  equation_systems.parameters.set<Real>("c_v3") = 1.0;
 
   // Solve the system "Keller-Segel".  This will be done by
   // looping over the specified time interval and calling the
@@ -433,8 +435,8 @@ void assemble_ks_u (EquationSystems & es,
 
   // Extract parameters
   const Real dt = es.parameters.get<Real> ("dt");
-  const Real c_u0 = es.parameters.get<Real> ("c_u0");
   const Real c_u1 = es.parameters.get<Real> ("c_u1");
+  const Real c_u2 = es.parameters.get<Real> ("c_u2");
 
   // Now we will loop over all the elements in the mesh that live on
   // the local processor. We will compute the element matrix and
@@ -512,7 +514,7 @@ void assemble_ks_u (EquationSystems & es,
                                       // Mass-matrix
                                       phi[i][qp]*phi[j][qp]
 				      // Diffusion term
-				      - dt*c_u0 * (dphi[i][qp]*dphi[j][qp])
+				      + dt*c_u1 * (dphi[i][qp]*dphi[j][qp])
                                       );
                 }
 	      // The RHS contribution
@@ -520,7 +522,7 @@ void assemble_ks_u (EquationSystems & es,
 				// Mass matrix term
                                 u_old*phi[i][qp] +
 				// Convection term
-				- dt * c_u1*u_old*(grad_v_old*dphi[i][qp])
+				+ dt*c_u2 * u_old*(grad_v_old*dphi[i][qp])
                                 );
 
             }
@@ -619,10 +621,10 @@ void assemble_ks_v (EquationSystems & es,
   std::vector<dof_id_type> dof_indices;
 
   // Extract parameters
-  const Real dt = es.parameters.get<Real> ("dt");
-  const Real c_v0 = es.parameters.get<Real> ("c_v0");
+  const Real dt   = es.parameters.get<Real> ("dt");
   const Real c_v1 = es.parameters.get<Real> ("c_v1");
   const Real c_v2 = es.parameters.get<Real> ("c_v2");
+  const Real c_v3 = es.parameters.get<Real> ("c_v3");
 
   // Now we will loop over all the elements in the mesh that live on
   // the local processor. We will compute the element matrix and
@@ -699,9 +701,9 @@ void assemble_ks_v (EquationSystems & es,
                                       // Time derivative (mass-matrix)
                                       phi[i][qp]*phi[j][qp] +
 				      // Diffusion term (stiffness matrix)
-				      dt*c_v0 * (dphi[i][qp]*dphi[j][qp]) +
+				      dt*c_v1 * (dphi[i][qp]*dphi[j][qp]) +
 				      // Reaction term (mass matrix)
-                                      dt*c_v1 * phi[i][qp]*phi[j][qp]
+                                      dt*c_v2 * phi[i][qp]*phi[j][qp]
                                       );
                 }
 	      // The RHS contribution
@@ -709,7 +711,7 @@ void assemble_ks_v (EquationSystems & es,
 				// Time derivative (mass matrix) term
                                 v_old*phi[i][qp] +
 				// Coupling term with u (live cell density)
-				dt*c_v2 * u_old*phi[i][qp]
+				dt*c_v3 * u_old*phi[i][qp]
                                 );
 
             }

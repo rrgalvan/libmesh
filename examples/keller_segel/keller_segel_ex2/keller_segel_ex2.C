@@ -69,11 +69,11 @@ using namespace libMesh;
 // mesh refinement, and with a changing mesh it will be necessary to
 // rebuild the system matrix.
 void assemble_ks_u (EquationSystems & es,
-                  const std::string & system_name);
+		    const std::string & system_name);
 // This function will assemble the system matrix and right-hand-side
 // for v at each time step.
 void assemble_ks_v (EquationSystems & es,
-                  const std::string & system_name);
+		    const std::string & system_name);
 
 // Function prototype.  This function will initialize the system.
 // Initialization functions are optional for systems.  They allow
@@ -81,9 +81,9 @@ void assemble_ks_v (EquationSystems & es,
 // initialization function is not provided then the default (0)
 // solution is provided.
 void init_ks_u (EquationSystems & es,
-              const std::string & system_name);
+		const std::string & system_name);
 void init_ks_v (EquationSystems & es,
-              const std::string & system_name);
+		const std::string & system_name);
 
 // Initial condition for u
 Number initial_value_u(const Point& p,
@@ -92,7 +92,8 @@ Number initial_value_u(const Point& p,
 			const std::string&)
 {
   Number x=p(0), y=p(1);
-  return 1.15*exp(-x*x-y*y)*pow(4-x*x,2)*pow(4-y*y,2);
+  return  1.15*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
+  // return 1;
 }
 
 // Initial condition for v
@@ -102,8 +103,8 @@ Number initial_value_v(const Point& p,
 			const std::string&)
 {
   Number x=p(0), y=p(1);
-  return 0.55*exp(-x*x-y*y)*pow(4-x*x,2)*pow(4-y*x,2);
-  // return 0;
+  return 0.55*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
+  // return 1;
 }
 
 // Begin the main program
@@ -129,18 +130,41 @@ int main (int argc, char ** argv)
   // Skip this 2D example if libMesh was compiled as 1D-only.
   libmesh_example_requires(2 <= LIBMESH_DIM, "2D support");
 
-  // Parse the input file
-  GetPot infile("keller_segel_ex2.in");
-  infile.parse_command_line(argc, argv);
+  // Parse options, and select a file for more options
+  GetPot options(argc, argv);
+  options.parse_command_line(argc, argv);
+  std::string input_file = options("infile", std::string("keller_segel_ex2.in"));
+
+  // Parse the input file, but keep more precedence to console arguments
+  options.parse_input_file(input_file);
+  options.parse_command_line(argc, argv);
 
   // Read in parameters from the input file
-  const unsigned int n_mesh_intervals = infile("n_mesh_intervals", 20);
-  const Real dt              = infile("delta_t", 0.0001);
-  const unsigned int n_time_steps   = infile("n_time_steps", 5);
-  const unsigned int save_n_steps   = infile("save_n_steps", 10);
-  const unsigned int fe_order   = infile("fe_order", 1);
-  std::string fe_family_str = infile("fe_family", std::string("LAGRANGE"));
+  const unsigned int n_mesh_intervals = options("nx", 20);
+  const Real dt                       = options("dt", 0.0001);
+  const unsigned int n_time_steps     = options("nt", 5);
+  const unsigned int save_n_steps     = options("save_n_steps", 10);
+  const unsigned int fe_order         = options("order", 1);
+  std::string fe_family_str           = options("family", std::string("LAGRANGE"));
   FEFamily fe_family = Utility::string_to_enum<FEFamily>(fe_family_str);
+
+  options.print(std::cout);
+
+  // Time scheme
+  // u_t - c_u1 \Delta u^m+1 + c_u2 \div(u^{m+r1} \grad v^{m+r2})
+  // v_t - c_v2 \Delta v^m+1 + c_v2 v^{m+r3} + c_v3 u{m+r4}
+  // scheme=0: ri=0, i=1,2,3,4
+  // scheme=1: r3=1, r1=r2=r4=0
+  // scheme=2: r1=r3=r4=1, r2=0
+  // scheme=3: r1=r2=r3=1, r4=0
+  const unsigned int time_scheme = options("scheme", 0);
+
+  // Keller-Segel parameters
+  const Real c_u1 = options("c_u1", 1.0);
+  const Real c_u2 = options("c_u2", 0.2);
+  const Real c_v1 = options("c_v1", 1.0);
+  const Real c_v2 = options("c_v2", 0.1);
+  const Real c_v3 = options("c_v3", 1.0);
 
   // Read the mesh from file.  This is the coarse mesh that will be used
   // in example 10 to demonstrate adaptive mesh refinement.  Here we will
@@ -156,7 +180,7 @@ int main (int argc, char ** argv)
                                        n_mesh_intervals, n_mesh_intervals,
                                        -2., 2.,
                                        -2., 2.,
-                                       QUAD9);
+                                       TRI6);
 
   // mesh.read ("mesh.xda");
 
@@ -201,6 +225,31 @@ int main (int argc, char ** argv)
 
   // Prints information about the system to the screen.
   equation_systems.print_info();
+  {
+    std::ostringstream out;
+
+    out << std::setw(2)
+	<< std::right
+	<< "time="
+	<< std::fixed
+	<< std::setw(9)
+	<< std::setprecision(6)
+	<< std::setfill('0')
+	<< std::left
+	<< system_u.time << " (" << system_v.time << ")"
+
+	<<  "...";
+
+
+      out << std::scientific
+	  << std::setprecision(9)
+	  << std::endl << "  max(u): " << system_u.solution->max()
+	  << ",  min(u): " << system_u.solution->min()
+	  << std::endl << "  max(v): " << system_v.solution->max()
+	  << ",  min(v): " << system_v.solution->min();
+
+    libMesh::out << out.str() << std::endl;
+  }
 
   // Write out the initial conditions.
 #ifdef LIBMESH_HAVE_EXODUS_API
@@ -213,14 +262,13 @@ int main (int argc, char ** argv)
 #endif
 
   // The Keller-Segel system requires that we specify
-  // the flow velocity.  We will specify it as a RealVectorValue
-  // data type and then use the Parameters object to pass it to
-  // the assemble function.
-  equation_systems.parameters.set<Real>("c_u0") = 1.0;
-  equation_systems.parameters.set<Real>("c_u1") = 0.2;
-  equation_systems.parameters.set<Real>("c_v0") = 1.0;
-  equation_systems.parameters.set<Real>("c_v1") = 0.1;
-  equation_systems.parameters.set<Real>("c_v2") = 1.0;
+  // some parameter to pass them to the assemble function.
+  equation_systems.parameters.set<unsigned int>("scheme") = time_scheme;
+  equation_systems.parameters.set<Real>("c_u1") = c_u1;
+  equation_systems.parameters.set<Real>("c_u2") = c_u2;
+  equation_systems.parameters.set<Real>("c_v1") = c_v1;
+  equation_systems.parameters.set<Real>("c_v2") = c_v2;
+  equation_systems.parameters.set<Real>("c_v3") = c_v3;
 
   // Solve the system "Keller-Segel".  This will be done by
   // looping over the specified time interval and calling the
@@ -259,12 +307,14 @@ int main (int argc, char ** argv)
 
             <<  "...";
 
-        out << std::scientific;
 
-	out << std::endl << "  max(u): " << system_u.solution->max();
-	out << std::endl << "  min(u): " << system_u.solution->min();
-	out << std::endl << "  max(v): " << system_v.solution->max();
-	out << std::endl << "  min(v): " << system_v.solution->min();
+	if ((t_step+1)%save_n_steps == 0 || t_step+1==n_time_steps)
+	  out << std::scientific
+	      << std::setprecision(9)
+	      << std::endl << "  max(u): " << system_u.solution->max()
+	      << ",  min(u): " << system_u.solution->min()
+	      << std::endl << "  max(v): " << system_v.solution->max()
+	      << ",  min(v): " << system_v.solution->min();
 
 	libMesh::out << out.str() << std::endl;
       }
@@ -433,8 +483,10 @@ void assemble_ks_u (EquationSystems & es,
 
   // Extract parameters
   const Real dt = es.parameters.get<Real> ("dt");
-  const Real c_u0 = es.parameters.get<Real> ("c_u0");
+  const unsigned int scheme =
+    es.parameters.get<unsigned int> ("scheme");
   const Real c_u1 = es.parameters.get<Real> ("c_u1");
+  const Real c_u2 = es.parameters.get<Real> ("c_u2");
 
   // Now we will loop over all the elements in the mesh that live on
   // the local processor. We will compute the element matrix and
@@ -486,7 +538,7 @@ void assemble_ks_u (EquationSystems & es,
           Gradient grad_u_old;
 	  // Previous values of v & its gradient
 	  Number v_old = 0.;
-	  Gradient grad_v_old = 0.;
+	  Gradient grad_v = 0.;
 
           // Compute the old solution & its gradient.
           for (std::size_t l=0; l<phi.size(); l++)
@@ -494,11 +546,14 @@ void assemble_ks_u (EquationSystems & es,
               u_old += phi[l][qp]*system.old_solution (dof_indices[l]);
               v_old += phi[l][qp]*system_v.old_solution (dof_indices[l]);
 
-              // This will work,
-              // grad_u_old += dphi[l][qp]*system.old_solution(dof_indices[l]);
-              // but we can do it without creating a temporary like this:
               grad_u_old.add_scaled (dphi[l][qp], system.old_solution (dof_indices[l]));
-              grad_v_old.add_scaled (dphi[l][qp], system_v.old_solution (dof_indices[l]));
+	      // In schemes 0,1,2 grad v is given explictly, in scheme 3 grad v is implicit
+	      // Note that in scheme 3 v system must be solved before assembling u
+              grad_v.add_scaled (dphi[l][qp],
+				 scheme==3 ?
+				 system_v.current_solution (dof_indices[l]) :
+				 system_v.old_solution (dof_indices[l])
+				 );
 	      // std::cout << system_v.old_solution(dof_indices[l]) << std::endl;
             }
 
@@ -509,18 +564,24 @@ void assemble_ks_u (EquationSystems & es,
 	      for (std::size_t j=0; j<phi.size(); j++)
 		{
 		  Ke(i,j) += JxW[qp]*(
-                                      // Mass-matrix
+                                      // Time derivative (mass-matrix)
                                       phi[i][qp]*phi[j][qp]
 				      // Diffusion term
-				      - dt*c_u0 * (dphi[i][qp]*dphi[j][qp])
+				      + dt*c_u1 * (dphi[i][qp]*dphi[j][qp])
+				      // Convection term (implicit in schemes 2,3)
+				      - ( scheme==2 || scheme==3 ?
+					  dt*c_u2 * phi[i][qp]*(grad_v*dphi[j][qp])
+					  : 0 )
                                       );
                 }
 	      // The RHS contribution
 	      Fe(i) += JxW[qp]*(
 				// Mass matrix term
                                 u_old*phi[i][qp] +
-				// Convection term
-				- dt * c_u1*u_old*(grad_v_old*dphi[i][qp])
+				// Convection term (explicit in schemes 0, 1)
+				+ ( scheme==0 || scheme==1 ?
+				    dt*c_u2 * u_old*(grad_v*dphi[i][qp])
+				    : 0)
                                 );
 
             }
@@ -620,9 +681,11 @@ void assemble_ks_v (EquationSystems & es,
 
   // Extract parameters
   const Real dt = es.parameters.get<Real> ("dt");
-  const Real c_v0 = es.parameters.get<Real> ("c_v0");
+  const unsigned int scheme =
+    es.parameters.get<unsigned int> ("scheme");
   const Real c_v1 = es.parameters.get<Real> ("c_v1");
   const Real c_v2 = es.parameters.get<Real> ("c_v2");
+  const Real c_v3 = es.parameters.get<Real> ("c_v3");
 
   // Now we will loop over all the elements in the mesh that live on
   // the local processor. We will compute the element matrix and
@@ -678,15 +741,14 @@ void assemble_ks_v (EquationSystems & es,
           // Compute the old solution & its gradient.
           for (std::size_t l=0; l<phi.size(); l++)
             {
-              u_old += phi[l][qp]*system_u.old_solution(dof_indices[l]);
-              v_old += phi[l][qp]*system.old_solution(dof_indices[l]);
-
-              // This will work,
-              // grad_u_old += dphi[l][qp]*system.old_solution(dof_indices[l]);
-              // but we can do it without creating a temporary like this:
-              grad_u_old.add_scaled (dphi[l][qp], system_u.old_solution(dof_indices[l]));
-              grad_v_old.add_scaled (dphi[l][qp], system.old_solution(dof_indices[l]));
-	      // std::cout << system_v.old_solution(dof_indices[l]) << std::endl;
+	      // In schemes 0,1,3 the term "u" is given explictly. In
+	      // scheme 2, it is implicit. Note that in scheme 2, u
+	      // system must be solved before assembling u
+	      u_old += phi[l][qp]*( scheme==2 ?
+				    system_u.current_solution(dof_indices[l]) :
+				    system_u.old_solution(dof_indices[l])
+				   );
+	      v_old += phi[l][qp]*system.old_solution(dof_indices[l]);
             }
 
           // Now compute the element matrix and RHS contributions, for each local dof.
@@ -697,19 +759,25 @@ void assemble_ks_v (EquationSystems & es,
 		{
 		  Ke(i,j) += JxW[qp]*(
                                       // Time derivative (mass-matrix)
-                                      phi[i][qp]*phi[j][qp] +
+                                      phi[i][qp]*phi[j][qp]
 				      // Diffusion term (stiffness matrix)
-				      dt*c_v0 * (dphi[i][qp]*dphi[j][qp]) +
-				      // Reaction term (mass matrix)
-                                      dt*c_v1 * phi[i][qp]*phi[j][qp]
+				      + dt*c_v1 * (dphi[i][qp]*dphi[j][qp])
+				      // Reaction v (implicit in schemes 1,2,3)
+				      + ( scheme==0 ? 0 :
+					  dt*c_v2 * phi[i][qp]*phi[j][qp]
+					 )
                                       );
                 }
 	      // The RHS contribution
 	      Fe(i) += JxW[qp]*(
 				// Time derivative (mass matrix) term
-                                v_old*phi[i][qp] +
+                                v_old*phi[i][qp]
+				// Reaction term (explicit in scheme 0)
+				- ( scheme==0 ?
+				    dt*c_v2 * v_old*phi[i][qp]
+				    : 0 )
 				// Coupling term with u (live cell density)
-				dt*c_v2 * u_old*phi[i][qp]
+				+ dt*c_v3 * u_old*phi[i][qp]
                                 );
 
             }
