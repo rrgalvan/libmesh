@@ -408,6 +408,7 @@ if (test "x$enableexamples" = "xyes"); then
    AC_CONFIG_FILES([
                 examples/keller_segel/keller_segel_ex1/Makefile
                 examples/keller_segel/keller_segel_ex2/Makefile
+                examples/keller_segel/keller_segel_ex3/Makefile
                 examples/introduction/introduction_ex1/Makefile
                 examples/introduction/introduction_ex2/Makefile
                 examples/introduction/introduction_ex3/Makefile

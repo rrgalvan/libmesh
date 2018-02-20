@@ -91,7 +91,7 @@ Number initial_value_u(const Point& p,
 			const std::string&,
 			const std::string&)
 {
-  Number x=p(0), y=p(1);
+  // Number x=p(0), y=p(1);
   // return  1.15*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
   return 1;
 }
@@ -153,11 +153,10 @@ int main (int argc, char ** argv)
   // Time scheme
   // u_t - c_u1 \Delta u^m+1 + c_u2 \div(u^{m+r1} \grad v^{m+r2})
   // v_t - c_v2 \Delta v^m+1 + c_v2 v^{m+r3} + c_v3 u{m+r4}
-  // scheme=0: ri=0, i=1,2,3,4
-  // scheme=1: r3=1, r1=r2=r4=0
-  // scheme=2: r1=r3=r4=1, r2=0
-  // scheme=3: r1=r2=r3=1, r4=0
-  const unsigned int time_scheme = options("scheme", 0);
+  const unsigned int r1 = options("r1", 0);
+  const unsigned int r2 = options("r2", 0);
+  const unsigned int r3 = options("r3", 0);
+  const unsigned int r4 = options("r4", 0);
 
   // Keller-Segel parameters
   const Real c_u1 = options("c_u1", 1.0);
@@ -274,7 +273,10 @@ int main (int argc, char ** argv)
 
   // The Keller-Segel system requires that we specify
   // some parameter to pass them to the assemble function.
-  equation_systems.parameters.set<unsigned int>("scheme") = time_scheme;
+  equation_systems.parameters.set<unsigned int>("r1") = r1;
+  equation_systems.parameters.set<unsigned int>("r2") = r2;
+  equation_systems.parameters.set<unsigned int>("r3") = r3;
+  equation_systems.parameters.set<unsigned int>("r4") = r4;
   equation_systems.parameters.set<Real>("c_u1") = c_u1;
   equation_systems.parameters.set<Real>("c_u2") = c_u2;
   equation_systems.parameters.set<Real>("c_v1") = c_v1;
@@ -340,12 +342,21 @@ int main (int argc, char ** argv)
       *system_u.old_local_solution = *system_u.current_local_solution;
       *system_v.old_local_solution = *system_v.current_local_solution;
 
-      // Assemble & solve the linear system for u
-      equation_systems.get_system("Keller-Segel.u").solve();
-      // Assemble & solve the linear system for v
-      equation_systems.get_system("Keller-Segel.v").solve();
+      assert( r1*r2==0); // Assert linearity of system
+      if(r1) { // Implicit u^{m+1}
+	// Assemble & solve the linear system for u
+	equation_systems.get_system("Keller-Segel.u").solve();
+	// Assemble & solve the linear system for v
+	equation_systems.get_system("Keller-Segel.v").solve();
+      }
+      else { // Implicit v^{m+1}
+	// Assemble & solve the linear system for v
+	equation_systems.get_system("Keller-Segel.v").solve();
+	// Assemble & solve the linear system for u
+	equation_systems.get_system("Keller-Segel.u").solve();
+      }
 
-      // Output evey nsteps time_steps to file.
+      // Save evey n time_steps to exodus file (to open with Paraview).
       if ((t_step+1)%save_n_steps == 0)
         {
 
@@ -355,15 +366,12 @@ int main (int argc, char ** argv)
           exo.write_timestep (exodus_filename, equation_systems, t_step+1, system_u.time);
 #else
           std::ostringstream file_name;
-
           file_name << "out_"
                     << std::setw(3)
                     << std::setfill('0')
                     << std::right
                     << t_step+1
                     << ".gmv";
-
-
           GMVIO(mesh).write_equation_systems (file_name.str(),
                                               equation_systems);
 #endif
@@ -409,9 +417,6 @@ void init_ks_v (EquationSystems & es,
 
   // Project initial conditions at time 0
   es.parameters.set<Real> ("time") = system_v.time = 0;
-
-  TransientLinearImplicitSystem & system_u =
-    es.get_system<TransientLinearImplicitSystem>("Keller-Segel.u");
 
   system_v.project_solution(initial_value_v, libmesh_nullptr, es.parameters);
   // system_v.project_vector(*system_u.solution);
@@ -498,8 +503,8 @@ void assemble_ks_u (EquationSystems & es,
 
   // Extract parameters
   const Real dt = es.parameters.get<Real> ("dt");
-  const unsigned int scheme =
-    es.parameters.get<unsigned int> ("scheme");
+  const unsigned int r1 = es.parameters.get<unsigned int> ("r1");
+  const unsigned int r2 = es.parameters.get<unsigned int> ("r2");
   const Real c_u1 = es.parameters.get<Real> ("c_u1");
   const Real c_u2 = es.parameters.get<Real> ("c_u2");
 
@@ -552,23 +557,18 @@ void assemble_ks_u (EquationSystems & es,
           Number u_old = 0.;
           Gradient grad_u_old;
 	  // Previous values of v & its gradient
-	  Number v_old = 0.;
 	  Gradient grad_v = 0.;
 
           // Compute the old solution & its gradient.
           for (std::size_t l=0; l<phi.size(); l++)
             {
               u_old += phi[l][qp]*system.old_solution (dof_indices[l]);
-              v_old += phi[l][qp]*system_v.old_solution (dof_indices[l]);
 
-              grad_u_old.add_scaled (dphi[l][qp], system.old_solution (dof_indices[l]));
-	      // In schemes 0,1,2 grad v is given explictly, in scheme 3 grad v is implicit
-	      // Note that in scheme 3 v system must be solved before assembling u
-              grad_v.add_scaled (dphi[l][qp],
-				 scheme==3 ?
-				 system_v.current_solution (dof_indices[l]) :
-				 system_v.old_solution (dof_indices[l])
-				 );
+	      // Define grad_v according to wether v is implicit (r2=1) or not (r2=0)
+              grad_v.add_scaled ((1-r2)*dphi[l][qp],
+				 system_v.old_solution (dof_indices[l]) );
+              grad_v.add_scaled (r2*dphi[l][qp],
+				 system_v.current_solution (dof_indices[l]) );
 	      // std::cout << system_v.old_solution(dof_indices[l]) << std::endl;
             }
 
@@ -583,20 +583,16 @@ void assemble_ks_u (EquationSystems & es,
                                       phi[i][qp]*phi[j][qp]
 				      // Diffusion term
 				      + dt*c_u1 * (dphi[i][qp]*dphi[j][qp])
-				      // Convection term (implicit in schemes 2,3)
-				      - ( scheme==2 || scheme==3 ?
-					  dt*c_u2 * phi[i][qp]*(grad_v*dphi[j][qp])
-					  : 0 )
+				      // Convection term (implicit if r1!=0)
+				      -  r1 * dt*c_u2 * phi[i][qp]*(grad_v*dphi[j][qp])
                                       );
                 }
 	      // The RHS contribution
 	      Fe(i) += JxW[qp]*(
 				// Mass matrix term
                                 u_old*phi[i][qp] +
-				// Convection term (explicit in schemes 0, 1)
-				+ ( scheme==0 || scheme==1 ?
-				    dt*c_u2 * u_old*(grad_v*dphi[i][qp])
-				    : 0)
+				// Convection term (implicit if r1!=0)
+				+ (1-r1) * dt*c_u2 * u_old*(grad_v*dphi[i][qp])
                                 );
 
             }
@@ -696,8 +692,8 @@ void assemble_ks_v (EquationSystems & es,
 
   // Extract parameters
   const Real dt = es.parameters.get<Real> ("dt");
-  const unsigned int scheme =
-    es.parameters.get<unsigned int> ("scheme");
+  const unsigned int r3 = es.parameters.get<unsigned int> ("r3");
+  const unsigned int r4 = es.parameters.get<unsigned int> ("r4");
   const Real c_v1 = es.parameters.get<Real> ("c_v1");
   const Real c_v2 = es.parameters.get<Real> ("c_v2");
   const Real c_v3 = es.parameters.get<Real> ("c_v3");
@@ -748,21 +744,18 @@ void assemble_ks_v (EquationSystems & es,
         {
           // Values to hold the old solution & its gradient.
           Number u_old = 0.;
-          Gradient grad_u_old;
 	  // Previous values of v & its gradient
 	  Number v_old = 0.;
-	  Gradient grad_v_old = 0.;
 
           // Compute the old solution & its gradient.
           for (std::size_t l=0; l<phi.size(); l++)
             {
-	      // In schemes 0,1,3 the term "u" is given explictly. In
-	      // scheme 2, it is implicit. Note that in scheme 2, u
-	      // system must be solved before assembling u
-	      u_old += phi[l][qp]*( scheme==2 ?
-				    system_u.current_solution(dof_indices[l]) :
-				    system_u.old_solution(dof_indices[l])
-				   );
+	      // Define u_old according to wether u is implicit (r4=1) or not (r4=0)
+	      // Note that if v is explicit and r4=1, u system must be solved before assembling v
+              u_old += (1-r4)*phi[l][qp]*system_u.old_solution(dof_indices[l]);
+              u_old +=     r4*phi[l][qp]*system_u.current_solution(dof_indices[l]);
+
+	      // Define v_old
 	      v_old += phi[l][qp]*system.old_solution(dof_indices[l]);
             }
 
@@ -777,21 +770,17 @@ void assemble_ks_v (EquationSystems & es,
                                       phi[i][qp]*phi[j][qp]
 				      // Diffusion term (stiffness matrix)
 				      + dt*c_v1 * (dphi[i][qp]*dphi[j][qp])
-				      // Reaction v (implicit in schemes 1,2,3)
-				      + ( scheme==0 ? 0 :
-					  dt*c_v2 * phi[i][qp]*phi[j][qp]
-					 )
+				      // Reaction v (if implicit, r3=1)
+				      + r3 * dt*c_v2 * phi[i][qp]*phi[j][qp]
                                       );
                 }
 	      // The RHS contribution
 	      Fe(i) += JxW[qp]*(
 				// Time derivative (mass matrix) term
                                 v_old*phi[i][qp]
-				// Reaction term (explicit in scheme 0)
-				- ( scheme==0 ?
-				    dt*c_v2 * v_old*phi[i][qp]
-				    : 0 )
-				// Coupling term with u (live cell density)
+				// Reaction v (if explicit, r3=0)
+				- (1-r3) * dt*c_v2 * v_old*phi[i][qp]
+				// Coupling term with u
 				+ dt*c_v3 * u_old*phi[i][qp]
                                 );
 
