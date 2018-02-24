@@ -158,7 +158,7 @@ int main (int argc, char ** argv)
                                        n_mesh_intervals, n_mesh_intervals,
                                        -2., 2.,
                                        -2., 2.,
-                                       QUAD9);
+                                       TRI6);
 
   // mesh.read ("mesh.xda");
 
@@ -261,13 +261,6 @@ int main (int argc, char ** argv)
 
             <<  "...";
 
-        out << std::scientific;
-
-	out << std::endl << "  max(u): " << system_u.solution->max();
-	out << std::endl << "  min(u): " << system_u.solution->min();
-	out << std::endl << "  max(v): " << system_v.solution->max();
-	out << std::endl << "  min(v): " << system_v.solution->min();
-
 	libMesh::out << out.str() << std::endl;
       }
 
@@ -289,6 +282,13 @@ int main (int argc, char ** argv)
       // Output evey nsteps time_steps to file.
       if ((t_step+1)%save_n_steps == 0)
         {
+	  std::ostringstream out;
+	  out << std::scientific;
+	  out << "  max(u): " << system_u.solution->max() << std::endl;
+	  out << "  min(u): " << system_u.solution->min() << std::endl;
+	  out << "  max(v): " << system_v.solution->max() << std::endl;
+	  out << "  min(v): " << system_v.solution->min() << std::endl;
+	  libMesh::out << out.str();
 
 #ifdef LIBMESH_HAVE_EXODUS_API
           ExodusII_IO exo(mesh);
@@ -297,18 +297,18 @@ int main (int argc, char ** argv)
 #else
           std::ostringstream file_name;
 
-          file_name << "out_"
-                    << std::setw(3)
-                    << std::setfill('0')
-                    << std::right
-                    << t_step+1
-                    << ".gmv";
 
+	file_name << "out_"
+		  << std::setw(3)
+		  << std::setfill('0')
+		  << std::right
+		  << t_step+1
+		  << ".gmv";
 
-          GMVIO(mesh).write_equation_systems (file_name.str(),
-                                              equation_systems);
+	GMVIO(mesh).write_equation_systems (file_name.str(),
+					    equation_systems);
 #endif
-        }
+	}
     }
 #endif // #ifdef LIBMESH_ENABLE_AMR
 

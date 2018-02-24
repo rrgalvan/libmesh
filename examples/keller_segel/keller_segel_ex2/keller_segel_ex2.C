@@ -92,8 +92,8 @@ Number initial_value_u(const Point& p,
 			const std::string&)
 {
   Number x=p(0), y=p(1);
-  // return  1.15*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
-  return 1;
+  return  1.15*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
+  // return 1;
 }
 
 // Initial condition for v
@@ -155,7 +155,7 @@ int main (int argc, char ** argv)
   // v_t - c_v2 \Delta v^m+1 + c_v2 v^{m+r3} + c_v3 u{m+r4}
   // scheme=0: ri=0, i=1,2,3,4
   // scheme=1: r3=1, r1=r2=r4=0
-  // scheme=2: r1=r3=r4=1, r2=0
+  // scheme=2: r1=1, r2=0, r3=1, r4=0
   // scheme=3: r1=r2=r3=1, r4=0
   const unsigned int time_scheme = options("scheme", 0);
 
@@ -393,6 +393,12 @@ void init_ks_u (EquationSystems & es,
   es.parameters.set<Real> ("time") = system_u.time = 0;
 
   system_u.project_solution(initial_value_u, libmesh_nullptr, es.parameters);
+
+  // Assure positivy of u
+  for (numeric_index_type i=system_u.solution->first_local_index();
+       i<system_u.solution->last_local_index(); i++)
+    if(system_u.solution->el(i) <0) system_u.solution->set(i, 0);
+
 }
 
 // We now define the function which provides the initialization for v
@@ -415,6 +421,11 @@ void init_ks_v (EquationSystems & es,
 
   system_v.project_solution(initial_value_v, libmesh_nullptr, es.parameters);
   // system_v.project_vector(*system_u.solution);
+
+  // Assure positivity of v
+  for (numeric_index_type i=system_v.solution->first_local_index();
+       i<system_v.solution->last_local_index(); i++)
+    if(system_v.solution->el(i) <0) system_v.solution->set(i, 0);
 }
 
 

@@ -35,7 +35,7 @@
 #include "libmesh/libmesh.h"
 #include "libmesh/mesh.h"
 #include "libmesh/mesh_generation.h" // For build_square()
-#include "libmesh/mesh_refinement.h"
+// #include "libmesh/mesh_refinement.h"
 #include "libmesh/gmv_io.h"
 #include "libmesh/equation_systems.h"
 #include "libmesh/fe.h"
@@ -91,9 +91,9 @@ Number initial_value_u(const Point& p,
 			const std::string&,
 			const std::string&)
 {
-  // Number x=p(0), y=p(1);
-  // return  1.15*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
-  return 1;
+  Number x=p(0), y=p(1);
+  return  1.15*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
+  // return 1;
 }
 
 // Initial condition for v
@@ -105,6 +105,55 @@ Number initial_value_v(const Point& p,
   Number x=p(0), y=p(1);
   return 0.55*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
   // return 1;
+}
+
+// Print system current time. Also current itertiation (if print_step!=-1) and
+// max/min of u and v (if print_max_min!=0)
+void system_print_info (EquationSystems & es, int t_step=-1,
+			int print_max_min=1)
+{
+  // Get a reference to the Keller-Segel system objects.
+  TransientLinearImplicitSystem & system_u =
+    es.get_system<TransientLinearImplicitSystem>("Keller-Segel.u");
+  TransientLinearImplicitSystem & system_v =
+    es.get_system<TransientLinearImplicitSystem>("Keller-Segel.v");
+
+  libmesh_assert_equal_to(system_u.time, system_v.time);
+
+  std::ostringstream out;
+
+  // Do fancy zero-padded formatting of the current time.
+  out << std::setw(2)
+      << std::right;
+
+  if(t_step!=-1) {
+    libMesh::out << " Solving time step " << t_step;
+  }
+  else {
+    libMesh::out << " Solving ";
+  }
+
+  out << "time="
+      << std::fixed
+      << std::setw(9)
+      << std::setprecision(6)
+      << std::setfill('0')
+      << std::left
+      << system_u.time
+
+      <<  "...";
+
+  if(print_max_min)
+    {
+      out << std::scientific
+	  << std::setprecision(9)
+	  << std::endl << "  max(u): " << system_u.solution->max()
+	  << ",  min(u): " << system_u.solution->min()
+	  << std::endl << "  max(v): " << system_v.solution->max()
+	  << ",  min(v): " << system_v.solution->min();
+    }
+
+  libMesh::out << out.str() << std::endl;
 }
 
 // Begin the main program
@@ -133,7 +182,7 @@ int main (int argc, char ** argv)
   // Parse options, and select a file for more options
   GetPot options(argc, argv);
   options.parse_command_line(argc, argv);
-  std::string input_file = options("infile", std::string("keller_segel_ex2.in"));
+  std::string input_file = options("infile", std::string("keller_segel_ex3.in"));
 
   // Parse the input file, but keep more precedence to console arguments
   options.parse_input_file(input_file);
@@ -235,37 +284,13 @@ int main (int argc, char ** argv)
 
   // Prints information about the system to the screen.
   equation_systems.print_info();
-  {
-    std::ostringstream out;
-
-    out << std::setw(2)
-	<< std::right
-	<< "time="
-	<< std::fixed
-	<< std::setw(9)
-	<< std::setprecision(6)
-	<< std::setfill('0')
-	<< std::left
-	<< system_u.time << " (" << system_v.time << ")"
-
-	<<  "...";
-
-
-      out << std::scientific
-	  << std::setprecision(9)
-	  << std::endl << "  max(u): " << system_u.solution->max()
-	  << ",  min(u): " << system_u.solution->min()
-	  << std::endl << "  max(v): " << system_v.solution->max()
-	  << ",  min(v): " << system_v.solution->min();
-
-    libMesh::out << out.str() << std::endl;
-  }
+  system_print_info(equation_systems);
 
   // Write out the initial conditions.
 #ifdef LIBMESH_HAVE_EXODUS_API
   // If Exodus is available, we'll write all time_steps to the same file
   // rather than one file per timestep.
-  std::string exodus_filename = "keller_segel_ex2.e";
+  std::string exodus_filename = "keller_segel_ex3.e";
   ExodusII_IO(mesh).write_equation_systems (exodus_filename, equation_systems);
 #else
   GMVIO(mesh).write_equation_systems ("out_000.gmv", equation_systems);
@@ -300,38 +325,6 @@ int main (int argc, char ** argv)
       equation_systems.parameters.set<Real> ("time") = system_u.time;
       equation_systems.parameters.set<Real> ("dt")   = dt;
 
-      // A pretty update message
-      libMesh::out << " Solving time step ";
-
-      // Do fancy zero-padded formatting of the current time.
-      {
-        std::ostringstream out;
-
-        out << std::setw(2)
-            << std::right
-            << t_step
-            << ", time="
-            << std::fixed
-            << std::setw(9)
-            << std::setprecision(6)
-            << std::setfill('0')
-            << std::left
-            << system_u.time << " (" << system_v.time << ")"
-
-            <<  "...";
-
-
-	if ((t_step+1)%save_n_steps == 0 || t_step+1==n_time_steps)
-	  out << std::scientific
-	      << std::setprecision(9)
-	      << std::endl << "  max(u): " << system_u.solution->max()
-	      << ",  min(u): " << system_u.solution->min()
-	      << std::endl << "  max(v): " << system_v.solution->max()
-	      << ",  min(v): " << system_v.solution->min();
-
-	libMesh::out << out.str() << std::endl;
-      }
-
       // At this point we need to update the old solution vector.  The
       // old solution vector will be the current solution vector from
       // the previous time step.  We will do this by extracting the
@@ -343,7 +336,7 @@ int main (int argc, char ** argv)
       *system_v.old_local_solution = *system_v.current_local_solution;
 
       assert( r1*r2==0); // Assert linearity of system
-      if(r1) { // Implicit u^{m+1}
+      if(r2==0) { // r1 may be !=0, Implicit u^{m+1}
 	// Assemble & solve the linear system for u
 	equation_systems.get_system("Keller-Segel.u").solve();
 	// Assemble & solve the linear system for v
@@ -355,6 +348,9 @@ int main (int argc, char ** argv)
 	// Assemble & solve the linear system for u
 	equation_systems.get_system("Keller-Segel.u").solve();
       }
+
+      // Print current interation, also max/min of solution
+      system_print_info(equation_systems, t_step);
 
       // Save evey n time_steps to exodus file (to open with Paraview).
       if ((t_step+1)%save_n_steps == 0)
@@ -401,6 +397,11 @@ void init_ks_u (EquationSystems & es,
   es.parameters.set<Real> ("time") = system_u.time = 0;
 
   system_u.project_solution(initial_value_u, libmesh_nullptr, es.parameters);
+
+  // Assure positivity of u
+  for (numeric_index_type i=system_u.solution->first_local_index();
+       i<system_u.solution->last_local_index(); i++)
+    if(system_u.solution->el(i) <0) system_u.solution->set(i, 0);
 }
 
 // We now define the function which provides the initialization for v
@@ -420,6 +421,11 @@ void init_ks_v (EquationSystems & es,
 
   system_v.project_solution(initial_value_v, libmesh_nullptr, es.parameters);
   // system_v.project_vector(*system_u.solution);
+
+  // Assure positivity of v
+  for (numeric_index_type i=system_v.solution->first_local_index();
+       i<system_v.solution->last_local_index(); i++)
+    if(system_v.solution->el(i) <0) system_v.solution->set(i, 0);
 }
 
 
@@ -564,7 +570,8 @@ void assemble_ks_u (EquationSystems & es,
             {
               u_old += phi[l][qp]*system.old_solution (dof_indices[l]);
 
-	      // Define grad_v according to wether v is implicit (r2=1) or not (r2=0)
+	      // Define grad_v according to wether v is implicit
+	      // (r2==1) or not (r2==0)
               grad_v.add_scaled ((1-r2)*dphi[l][qp],
 				 system_v.old_solution (dof_indices[l]) );
               grad_v.add_scaled (r2*dphi[l][qp],
@@ -584,14 +591,14 @@ void assemble_ks_u (EquationSystems & es,
 				      // Diffusion term
 				      + dt*c_u1 * (dphi[i][qp]*dphi[j][qp])
 				      // Convection term (implicit if r1!=0)
-				      -  r1 * dt*c_u2 * phi[i][qp]*(grad_v*dphi[j][qp])
+				      - r1 * dt*c_u2 * phi[i][qp]*(grad_v*dphi[j][qp])
                                       );
                 }
 	      // The RHS contribution
 	      Fe(i) += JxW[qp]*(
 				// Mass matrix term
                                 u_old*phi[i][qp] +
-				// Convection term (implicit if r1!=0)
+				// Convection term (expliciti if r1==0)
 				+ (1-r1) * dt*c_u2 * u_old*(grad_v*dphi[i][qp])
                                 );
 
@@ -750,8 +757,9 @@ void assemble_ks_v (EquationSystems & es,
           // Compute the old solution & its gradient.
           for (std::size_t l=0; l<phi.size(); l++)
             {
-	      // Define u_old according to wether u is implicit (r4=1) or not (r4=0)
-	      // Note that if v is explicit and r4=1, u system must be solved before assembling v
+	      // Define u_old according to wether u is implicit
+	      // (r4==1) or not (r4==0) Note that if v is explicit and
+	      // r4==1, u system must be solved before assembling v
               u_old += (1-r4)*phi[l][qp]*system_u.old_solution(dof_indices[l]);
               u_old +=     r4*phi[l][qp]*system_u.current_solution(dof_indices[l]);
 
@@ -770,7 +778,7 @@ void assemble_ks_v (EquationSystems & es,
                                       phi[i][qp]*phi[j][qp]
 				      // Diffusion term (stiffness matrix)
 				      + dt*c_v1 * (dphi[i][qp]*dphi[j][qp])
-				      // Reaction v (if implicit, r3=1)
+				      // Reaction v (implicit if r3==1)
 				      + r3 * dt*c_v2 * phi[i][qp]*phi[j][qp]
                                       );
                 }
@@ -778,7 +786,7 @@ void assemble_ks_v (EquationSystems & es,
 	      Fe(i) += JxW[qp]*(
 				// Time derivative (mass matrix) term
                                 v_old*phi[i][qp]
-				// Reaction v (if explicit, r3=0)
+				// Reaction v (if explicit, r3==0)
 				- (1-r3) * dt*c_v2 * v_old*phi[i][qp]
 				// Coupling term with u
 				+ dt*c_v3 * u_old*phi[i][qp]

@@ -1,0 +1,433 @@
+-- FreeFem++ v  3.500002 (date Ven 20 jan 2017 09:13:24 CET)
+ Load: lg_fem lg_mesh lg_mesh3 
+    1 : // Keller-Segel Italy-Spanish project
+    2 : 
+    3 : include "getARGV.idp" // for gestion of FreeFem++ argument and in version 3.10-1 FH
+    2 :  // F. Hecht 
+    3 :  // Usage:  getARGV(n,defaultvalue) // get the fist used default valeu
+    4 :  //  or     getARGV(after,defaultvalue) // get the arg after after 
+    5 :  // the type of delfaut value given the return type: int,double, string
+    6 :  func int usedARGV(int n)
+    7 : {
+    8 :   int k=1,ii=1,kk=1,ret=-1;
+    9 :   for(int i=1;i<ARGV.n;++i)
+   10 :    {
+   11 :    // cout <<i<< " "<< ARGV[i] << " " <<(ARGV[i]=="-v") << " " << kk << "==" 
+   12 :    //      << n << " " << ARGV[i].rfind("dp") << " " <<ARGV[i].length-2  << endl;
+   13 :         
+   14 :        if(ARGV[i]=="-v") i++;
+   15 :        else if(ARGV[i]=="-fglut") i++;
+   16 :        else if(ARGV[i]=="-ffg") i++;
+   17 :        else if(ARGV[i]=="-glut") i++;
+   18 :        else if(ARGV[i]=="-f") i++;
+   19 :        else if(ARGV[i]=="-nw") ii;
+   20 :        else if(ARGV[i]=="-wait") ii;
+   21 :        else if(ARGV[i]=="-ne") ii;
+   22 :        else if(ARGV[i]=="-cd") ii;
+   23 :        //else if(ARGV[i].rfind(".edp")==ARGV[i].length-4 ) ii;
+   24 :        else if(i==1) ii;
+   25 :        else if(kk++==n) {ret=i;}
+   26 :       // else cout << " +++ \n";
+   27 :      }
+   28 :    //  cout << ret << endl;
+   29 :     return ret;
+   30 : }
+   31 : 
+   32 : func int usedARGV(string after)
+   33 : {
+   34 :   int ret=-1;
+   35 :   for(int i=ARGV.n-1;i>=0;--i)        
+   36 :        if(ARGV[i]==after) { ret=++i; break;}
+   37 :   if(ARGV.n<ret) ret=-1;
+   38 :   return ret;
+   39 : }
+   40 : 
+   41 : func int getARGV(int n,int default)
+   42 : {
+   43 :    int d=default;
+   44 :    int k=usedARGV(n);
+   45 :    if(k>0) d=atoi(ARGV[k]);
+   46 :     return d;
+   47 : }
+   48 : func real getARGV(int n,real default)
+   49 : {
+   50 :    real d=default;
+   51 :    int k=usedARGV(n);
+   52 :    if(k>0) d=atof(ARGV[k]);
+   53 :    return d;
+   54 : }
+   55 : func string getARGV(int n,string default)
+   56 : {
+   57 :    string d=default;
+   58 :    int k=usedARGV(n);
+   59 :    if(k>0) d=ARGV[k];
+   60 :     return d;
+   61 : }
+   62 : 
+   63 : func int getARGV(string after,int default)
+   64 : {
+   65 :    int d=default;
+   66 :    int k=usedARGV(after);
+   67 :    if(k>0) d=atoi(ARGV[k]);
+   68 :     return d;
+   69 : }
+   70 : func real getARGV(string after,real default)
+   71 : {
+   72 :    real d=default;
+   73 :    int k=usedARGV(after);
+   74 :    if(k>0) d=atof(ARGV[k]);
+   75 :    return d;
+   76 : }
+   77 : func string getARGV(string after,string default)
+   78 : {
+   79 :    string d=default;
+   80 :    int k=usedARGV(after);
+   81 :    if(k>0) d=ARGV[k];
+   82 :     return d;
+   83 : }
+   84 : 
+   85 : /*
+   86 : cout << getARGV(1,100) << endl;
+   87 : cout << getARGV(2,200.) << endl;
+   88 : cout << getARGV(3,"300.000") << endl;
+   89 : cout << getARGV("-n"," xxx") << endl;
+   90 : */
+   91 : ;
+    4 : 
+    5 : verbosity = getARGV("-verb", 0);
+    6 : int textVerbosity = 1;
+    7 : 
+    8 : // Mesh and finite element spaces
+    9 : int nx = getARGV("-nx",30); // Number of mesh subdivisions
+   10 : mesh Th = square(nx, nx, [4*x-2, 4*y-2]);
+   11 : 
+   12 : fespace Vh(Th,P1);
+   13 : Vh u, u0, bu; // Solution at t_{n+1}, t_n, test function.
+   14 : Vh v, v0, bv; // Solution at t_{n+1}, t_n, test function.
+   15 : 
+   16 :  macro grad(u )   [ dx(u), dy(u) ] // End of Macro
+   17 : // Time parameters
+   18 : real t = 0;
+   19 : int nt = getARGV("-nt",50); // Number of time iterations
+   20 : real dt = getARGV("-dt", 1.e-4); // Time step
+   21 : 
+   22 : // Keller-Segel data
+   23 : 
+   24 : real k1=0.2;
+   25 : real k2=1;
+   26 : real k3=0.1;
+   27 : real k4=1;
+   28 : 
+   29 : real integral;
+   30 : 
+   31 : func initialU = 1.15*exp(-x^2-y^2)*(4-x^2)^2*(4-y^2)^2;
+   32 : func initialU2 = 24*(((x^2-4)^2+(y^2-4)^2 + 1)-0.05*((x^2-4)^4+(y^2-4)^4));
+   33 : func initialV = 0.55*exp(-x^2-y^2)*(4-x^2)^2*(4-y^2)^2;
+   34 : 
+   35 : u0 = initialU;
+   36 : v0 = initialV;
+   37 : 
+   38 : cout << "Initial values:" << endl;
+   39 : cout << "  max(u0): " << u0[].max << endl;
+   40 : cout << "  min(u0): " << u0[].min << endl;
+   41 : cout << "  max(v0): " << v0[].max << endl;
+   42 : cout << "  min(v0): " << v0[].min << endl;
+   43 : 
+   44 : // Variational problem
+   45 : 
+   46 : problem KellerSegelU(u,bu)=
+   47 : int2d(Th) (
+   48 : 	u*bu/dt+      [ dx(u), dy(u) ] '*      [ dx(bu), dy(bu) ] )
+   49 : - int2d(Th)(
+   50 : 	u0*bu/dt
+   51 : 	+ k1*u0*      [ dx(v0), dy(v0) ] '*      [ dx(bu), dy(bu) ] 
+   52 : 	);
+   53 : 
+   54 : problem KellerSegelV(v,bv) =
+   55 : 	   int2d(Th)(
+   56 : 		  v*bv/dt
+   57 : 		  + k2*      [ dx(v), dy(v) ] '*      [ dx(bv), dy(bv) ] 
+   58 : 		   )
+   59 : 	  - int2d(Th)(
+   60 : 		   v0*bv/dt
+   61 : 		   + k4*u0*bv
+   62 : 		   - k3*v0*bv
+   63 : 		    );
+   64 : 
+   65 : // Time loop
+   66 : 
+   67 : for (int k=1; k<=nt; k++) {
+   68 :   t=t+dt;
+   69 :   if(textVerbosity>0) cout << "Solving, iter: " << k << " (t=" << t << ")" << endl;
+   70 : 
+   71 :   KellerSegelU;
+   72 :   KellerSegelV; // Solve system!
+   73 :   u0 = u;  // For next iteration
+   74 :   v0 = v;  // For next iteration
+   75 : 
+   76 :   plot(u, value=1, fill=1, dim=3);
+   77 : 
+   78 :   cout << "  max(u): " << u[].max << endl;
+   79 :   cout << "  min(u): " << u[].min << endl;
+   80 :   cout << "  max(v): " << v[].max << endl;
+   81 :   cout << "  min(v): " << v[].min << endl;
+   82 : 
+   83 :   cout.flush;
+   84 : }
+   85 :  sizestack + 1024 =7920  ( 6896 )
+
+Initial values:
+  max(u0): 294.4
+  min(u0): 0
+  max(v0): 140.8
+  min(v0): 0
+Solving, iter: 1 (t=0.0001)
+  max(u): 299.36
+  min(u): -5.60766e-07
+  max(v): 140.742
+  min(v): -2.68252e-07
+Solving, iter: 2 (t=0.0002)
+  max(u): 304.391
+  min(u): -1.13686e-06
+  max(v): 140.684
+  min(v): -5.43943e-07
+Solving, iter: 3 (t=0.0003)
+  max(u): 309.495
+  min(u): -1.72674e-06
+  max(v): 140.627
+  min(v): -8.26347e-07
+Solving, iter: 4 (t=0.0004)
+  max(u): 314.672
+  min(u): -2.32901e-06
+  max(v): 140.571
+  min(v): -1.11479e-06
+Solving, iter: 5 (t=0.0005)
+  max(u): 319.923
+  min(u): -2.94234e-06
+  max(v): 140.515
+  min(v): -1.40865e-06
+Solving, iter: 6 (t=0.0006)
+  max(u): 325.248
+  min(u): -3.56553e-06
+  max(v): 140.46
+  min(v): -1.70735e-06
+Solving, iter: 7 (t=0.0007)
+  max(u): 330.648
+  min(u): -4.19744e-06
+  max(v): 140.405
+  min(v): -2.01034e-06
+Solving, iter: 8 (t=0.0008)
+  max(u): 336.125
+  min(u): -4.83701e-06
+  max(v): 140.351
+  min(v): -2.31713e-06
+Solving, iter: 9 (t=0.0009)
+  max(u): 341.678
+  min(u): -5.48326e-06
+  max(v): 140.297
+  min(v): -2.62723e-06
+Solving, iter: 10 (t=0.001)
+  max(u): 347.308
+  min(u): -6.13524e-06
+  max(v): 140.245
+  min(v): -2.94021e-06
+Solving, iter: 11 (t=0.0011)
+  max(u): 353.017
+  min(u): -6.7921e-06
+  max(v): 140.193
+  min(v): -3.25565e-06
+Solving, iter: 12 (t=0.0012)
+  max(u): 358.805
+  min(u): -7.45299e-06
+  max(v): 140.141
+  min(v): -3.57316e-06
+Solving, iter: 13 (t=0.0013)
+  max(u): 364.672
+  min(u): -8.11714e-06
+  max(v): 140.09
+  min(v): -3.89235e-06
+Solving, iter: 14 (t=0.0014)
+  max(u): 370.62
+  min(u): -8.7838e-06
+  max(v): 140.04
+  min(v): -4.21288e-06
+Solving, iter: 15 (t=0.0015)
+  max(u): 376.649
+  min(u): -9.45227e-06
+  max(v): 139.99
+  min(v): -4.5344e-06
+Solving, iter: 16 (t=0.0016)
+  max(u): 382.76
+  min(u): -1.01219e-05
+  max(v): 139.942
+  min(v): -4.85659e-06
+Solving, iter: 17 (t=0.0017)
+  max(u): 388.953
+  min(u): -1.07919e-05
+  max(v): 139.893
+  min(v): -5.17914e-06
+Solving, iter: 18 (t=0.0018)
+  max(u): 395.23
+  min(u): -1.14619e-05
+  max(v): 139.846
+  min(v): -5.50175e-06
+Solving, iter: 19 (t=0.0019)
+  max(u): 401.59
+  min(u): -1.2131e-05
+  max(v): 139.799
+  min(v): -5.82413e-06
+Solving, iter: 20 (t=0.002)
+  max(u): 408.036
+  min(u): -1.27989e-05
+  max(v): 139.753
+  min(v): -6.14599e-06
+Solving, iter: 21 (t=0.0021)
+  max(u): 414.567
+  min(u): -1.34648e-05
+  max(v): 139.707
+  min(v): -6.46708e-06
+Solving, iter: 22 (t=0.0022)
+  max(u): 421.185
+  min(u): -1.41283e-05
+  max(v): 139.662
+  min(v): -6.78711e-06
+Solving, iter: 23 (t=0.0023)
+  max(u): 427.889
+  min(u): -1.47888e-05
+  max(v): 139.618
+  min(v): -7.10584e-06
+Solving, iter: 24 (t=0.0024)
+  max(u): 434.681
+  min(u): -1.54458e-05
+  max(v): 139.575
+  min(v): -7.42301e-06
+Solving, iter: 25 (t=0.0025)
+  max(u): 441.562
+  min(u): -1.60988e-05
+  max(v): 139.532
+  min(v): -7.73837e-06
+Solving, iter: 26 (t=0.0026)
+  max(u): 448.532
+  min(u): -1.67473e-05
+  max(v): 139.49
+  min(v): -8.05167e-06
+Solving, iter: 27 (t=0.0027)
+  max(u): 455.592
+  min(u): -1.73907e-05
+  max(v): 139.449
+  min(v): -8.36268e-06
+Solving, iter: 28 (t=0.0028)
+  max(u): 462.743
+  min(u): -1.80286e-05
+  max(v): 139.409
+  min(v): -8.67116e-06
+Solving, iter: 29 (t=0.0029)
+  max(u): 469.986
+  min(u): -1.86604e-05
+  max(v): 139.369
+  min(v): -8.97687e-06
+Solving, iter: 30 (t=0.003)
+  max(u): 477.321
+  min(u): -1.92858e-05
+  max(v): 139.33
+  min(v): -9.27958e-06
+Solving, iter: 31 (t=0.0031)
+  max(u): 484.749
+  min(u): -1.99042e-05
+  max(v): 139.292
+  min(v): -9.57906e-06
+Solving, iter: 32 (t=0.0032)
+  max(u): 492.271
+  min(u): -2.05152e-05
+  max(v): 139.254
+  min(v): -9.87507e-06
+Solving, iter: 33 (t=0.0033)
+  max(u): 499.888
+  min(u): -2.11182e-05
+  max(v): 139.217
+  min(v): -1.01674e-05
+Solving, iter: 34 (t=0.0034)
+  max(u): 507.601
+  min(u): -2.17129e-05
+  max(v): 139.181
+  min(v): -1.04558e-05
+Solving, iter: 35 (t=0.0035)
+  max(u): 515.409
+  min(u): -2.22987e-05
+  max(v): 139.146
+  min(v): -1.074e-05
+Solving, iter: 36 (t=0.0036)
+  max(u): 523.315
+  min(u): -2.28752e-05
+  max(v): 139.112
+  min(v): -1.10199e-05
+Solving, iter: 37 (t=0.0037)
+  max(u): 531.319
+  min(u): -2.34419e-05
+  max(v): 139.078
+  min(v): -1.12951e-05
+Solving, iter: 38 (t=0.0038)
+  max(u): 539.422
+  min(u): -2.39983e-05
+  max(v): 139.045
+  min(v): -1.15656e-05
+Solving, iter: 39 (t=0.0039)
+  max(u): 547.625
+  min(u): -2.45439e-05
+  max(v): 139.013
+  min(v): -1.18309e-05
+Solving, iter: 40 (t=0.004)
+  max(u): 555.928
+  min(u): -2.50784e-05
+  max(v): 138.982
+  min(v): -1.2091e-05
+Solving, iter: 41 (t=0.0041)
+  max(u): 564.332
+  min(u): -2.56012e-05
+  max(v): 138.951
+  min(v): -1.23455e-05
+Solving, iter: 42 (t=0.0042)
+  max(u): 572.839
+  min(u): -2.61118e-05
+  max(v): 138.922
+  min(v): -1.25943e-05
+Solving, iter: 43 (t=0.0043)
+  max(u): 581.449
+  min(u): -2.66098e-05
+  max(v): 138.893
+  min(v): -1.28371e-05
+Solving, iter: 44 (t=0.0044)
+  max(u): 590.163
+  min(u): -2.70947e-05
+  max(v): 138.865
+  min(v): -1.30736e-05
+Solving, iter: 45 (t=0.0045)
+  max(u): 598.982
+  min(u): -2.7566e-05
+  max(v): 138.838
+  min(v): -1.33037e-05
+Solving, iter: 46 (t=0.0046)
+  max(u): 607.907
+  min(u): -2.80233e-05
+  max(v): 138.811
+  min(v): -1.35271e-05
+Solving, iter: 47 (t=0.0047)
+  max(u): 616.939
+  min(u): -2.8466e-05
+  max(v): 138.786
+  min(v): -1.37436e-05
+Solving, iter: 48 (t=0.0048)
+  max(u): 626.079
+  min(u): -2.88937e-05
+  max(v): 138.761
+  min(v): -1.39529e-05
+Solving, iter: 49 (t=0.0049)
+  max(u): 635.328
+  min(u): -2.93058e-05
+  max(v): 138.737
+  min(v): -1.41548e-05
+Solving, iter: 50 (t=0.005)
+  max(u): 644.686
+  min(u): -3.00645e-05
+  max(v): 138.714
+  min(v): -1.45234e-05
