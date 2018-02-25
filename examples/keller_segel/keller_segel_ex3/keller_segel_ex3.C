@@ -104,7 +104,7 @@ Number initial_value_v(const Point& p,
 {
   Number x=p(0), y=p(1);
   return 0.55*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
-  // return 1;
+  // return x*x;
 }
 
 // Print system current time. Also current itertiation (if print_step!=-1) and
@@ -133,7 +133,7 @@ void system_print_info (EquationSystems & es, int t_step=-1,
     libMesh::out << " Solving ";
   }
 
-  out << "time="
+  out << ", time="
       << std::fixed
       << std::setw(9)
       << std::setprecision(6)
@@ -148,6 +148,7 @@ void system_print_info (EquationSystems & es, int t_step=-1,
       out << std::scientific
 	  << std::setprecision(9)
 	  << std::endl << "  max(u): " << system_u.solution->max()
+	  // << std::endl << "  values of u: " << *system_u.solution
 	  << ",  min(u): " << system_u.solution->min()
 	  << std::endl << "  max(v): " << system_v.solution->max()
 	  << ",  min(v): " << system_v.solution->min();
@@ -201,7 +202,7 @@ int main (int argc, char ** argv)
 
   // Time scheme
   // u_t - c_u1 \Delta u^m+1 + c_u2 \div(u^{m+r1} \grad v^{m+r2})
-  // v_t - c_v2 \Delta v^m+1 + c_v2 v^{m+r3} + c_v3 u{m+r4}
+  // v_t - c_v1 \Delta v^m+1 + c_v2 v^{m+r3} + c_v3 u{m+r4}
   const unsigned int r1 = options("r1", 0);
   const unsigned int r2 = options("r2", 0);
   const unsigned int r3 = options("r3", 0);
@@ -335,14 +336,13 @@ int main (int argc, char ** argv)
       *system_u.old_local_solution = *system_u.current_local_solution;
       *system_v.old_local_solution = *system_v.current_local_solution;
 
-      assert( r1*r2==0); // Assert linearity of system
-      if(r2==0) { // r1 may be !=0, Implicit u^{m+1}
+      if(r2==0) { // Explicit v^m in the non-linear term
 	// Assemble & solve the linear system for u
 	equation_systems.get_system("Keller-Segel.u").solve();
 	// Assemble & solve the linear system for v
 	equation_systems.get_system("Keller-Segel.v").solve();
       }
-      else { // Implicit v^{m+1}
+      else { // Implicit v^{m+1} in the non-linear term
 	// Assemble & solve the linear system for v
 	equation_systems.get_system("Keller-Segel.v").solve();
 	// Assemble & solve the linear system for u
@@ -422,7 +422,7 @@ void init_ks_v (EquationSystems & es,
   system_v.project_solution(initial_value_v, libmesh_nullptr, es.parameters);
   // system_v.project_vector(*system_u.solution);
 
-  // Assure positivity of v
+  // // Assure positivity of v
   for (numeric_index_type i=system_v.solution->first_local_index();
        i<system_v.solution->last_local_index(); i++)
     if(system_v.solution->el(i) <0) system_v.solution->set(i, 0);
@@ -527,6 +527,7 @@ void assemble_ks_u (EquationSystems & es,
       // Store a pointer to the element we are currently
       // working on.  This allows for nicer syntax later.
       const Elem * elem = *el;
+      // std::cout << "elem=" << *el << ": " << std::endl;
 
       // Get the degree of freedom indices for the
       // current element.  These define where in the global
@@ -573,13 +574,15 @@ void assemble_ks_u (EquationSystems & es,
 	      // Define grad_v according to wether v is implicit
 	      // (r2==1) or not (r2==0)
               grad_v.add_scaled ((1-r2)*dphi[l][qp],
-				 system_v.old_solution (dof_indices[l]) );
+	      			 system_v.old_solution (dof_indices[l]) );
               grad_v.add_scaled (r2*dphi[l][qp],
-				 system_v.current_solution (dof_indices[l]) );
-	      // std::cout << system_v.old_solution(dof_indices[l]) << std::endl;
+	      			 system_v.current_solution (dof_indices[l]) );
+              // grad_v.add_scaled (dphi[l][qp], system_v.old_solution (dof_indices[l]) );
             }
+	  // std::cout << system_v.old_solution(dof_indices[l]) << std::endl;
+	  // std::cout << "qp=" << qp << ": " << grad_v << std::endl;
 
-          // Now compute the element matrix and RHS contributions, for each local dof.
+	  // Now compute the element matrix and RHS contributions, for each local dof.
           for (std::size_t i=0; i<phi.size(); i++)
             {
 	      // The matrix contribution
@@ -591,7 +594,7 @@ void assemble_ks_u (EquationSystems & es,
 				      // Diffusion term
 				      + dt*c_u1 * (dphi[i][qp]*dphi[j][qp])
 				      // Convection term (implicit if r1!=0)
-				      - r1 * dt*c_u2 * phi[i][qp]*(grad_v*dphi[j][qp])
+				      - r1 * dt*c_u2 * phi[j][qp]*(grad_v*dphi[i][qp])
                                       );
                 }
 	      // The RHS contribution
