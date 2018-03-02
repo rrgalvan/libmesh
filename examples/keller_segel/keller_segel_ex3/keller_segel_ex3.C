@@ -75,6 +75,11 @@ void assemble_ks_u (EquationSystems & es,
 void assemble_ks_v (EquationSystems & es,
 		    const std::string & system_name);
 
+// Function prototype.
+void compute_max_min_u_v (EquationSystems & es,
+			  Number& max_u, Number& min_u,
+			  Number& max_v, Number& min_v);
+
 // Function prototype.  This function will initialize the system.
 // Initialization functions are optional for systems.  They allow
 // you to specify the initial values of the solution.  If an
@@ -145,13 +150,17 @@ void system_print_info (EquationSystems & es, int t_step=-1,
 
   if(print_max_min)
     {
+      Number max_u, min_u, max_v, min_v;
+      compute_max_min_u_v (es, max_u, min_u, max_v, min_v);
+
       out << std::scientific
 	  << std::setprecision(9)
-	  << std::endl << "  max(u): " << system_u.solution->max()
+	  << std::endl << "  max(u): " << max_u //system_u.solution->max()
 	  // << std::endl << "  values of u: " << *system_u.solution
-	  << ",  min(u): " << system_u.solution->min()
-	  << std::endl << "  max(v): " << system_v.solution->max()
-	  << ",  min(v): " << system_v.solution->min();
+	  << ",  min(u): " << min_u //system_u.solution->min()
+	  << std::endl << "  max(v): " << max_v //system_v.solution->max()
+	  << ",  min(v): " << min_v //system_v.solution->min();
+	;
     }
 
   libMesh::out << out.str() << std::endl;
@@ -352,6 +361,7 @@ int main (int argc, char ** argv)
       // Print current interation, also max/min of solution
       system_print_info(equation_systems, t_step);
 
+
       // Save evey n time_steps to exodus file (to open with Paraview).
       if ((t_step+1)%save_n_steps == 0)
         {
@@ -371,6 +381,7 @@ int main (int argc, char ** argv)
           GMVIO(mesh).write_equation_systems (file_name.str(),
                                               equation_systems);
 #endif
+
         }
     }
 #endif // #ifdef LIBMESH_ENABLE_AMR
@@ -398,10 +409,10 @@ void init_ks_u (EquationSystems & es,
 
   system_u.project_solution(initial_value_u, libmesh_nullptr, es.parameters);
 
-  // Assure positivity of u
-  for (numeric_index_type i=system_u.solution->first_local_index();
-       i<system_u.solution->last_local_index(); i++)
-    if(system_u.solution->el(i) <0) system_u.solution->set(i, 0);
+  // // Assure positivity of u
+  // for (numeric_index_type i=system_u.solution->first_local_index();
+  //      i<system_u.solution->last_local_index(); i++)
+  //   if(system_u.solution->el(i) <0) system_u.solution->set(i, 0);
 }
 
 // We now define the function which provides the initialization for v
@@ -422,10 +433,10 @@ void init_ks_v (EquationSystems & es,
   system_v.project_solution(initial_value_v, libmesh_nullptr, es.parameters);
   // system_v.project_vector(*system_u.solution);
 
-  // // Assure positivity of v
-  for (numeric_index_type i=system_v.solution->first_local_index();
-       i<system_v.solution->last_local_index(); i++)
-    if(system_v.solution->el(i) <0) system_v.solution->set(i, 0);
+  // // // Assure positivity of v
+  // for (numeric_index_type i=system_v.solution->first_local_index();
+  //      i<system_v.solution->last_local_index(); i++)
+  //   if(system_v.solution->el(i) <0) system_v.solution->set(i, 0);
 }
 
 
@@ -813,4 +824,54 @@ void assemble_ks_v (EquationSystems & es,
   // That concludes the system matrix assembly routine for v
 
 #endif // #ifdef LIBMESH_ENABLE_AMR
+}
+
+void compute_max_min_u_v (EquationSystems & es,
+			  Number& max_u, Number& min_u,
+			  Number& max_v, Number& min_v)
+{
+  // Get a constant reference to the mesh object.
+  const MeshBase & mesh = es.get_mesh();
+
+  // Get a reference to the Keller-Segel.u system object.
+  TransientLinearImplicitSystem & system_u =
+    es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.u");
+
+  // Get a reference to the Keller-Segel.v system object.
+  TransientLinearImplicitSystem & system_v =
+    es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.v");
+
+  unsigned int var_u = 0;
+  unsigned int var_v = 0;
+
+  // We start
+  int starting=1;
+
+  // Now we will loop over all the elements in the mesh that live on
+  // the local processor.
+  MeshBase::const_node_iterator       nod     = mesh.active_nodes_begin();
+  const MeshBase::const_node_iterator end_nod = mesh.active_nodes_end();
+
+  for ( ; nod != end_nod; ++nod)
+    {
+      const Node* node = *nod;
+      if(starting)
+	{
+	  max_u = system_u.point_value(var_u, *node);
+	  min_u = max_u;
+	  max_v = system_v.point_value(var_v, *node);
+	  min_v = max_v;
+	  starting=0;
+	}
+      else
+	{
+	  max_u = std::max(max_u, system_u.point_value(var_u, *node));
+	  min_u = std::min(min_u, system_u.point_value(var_u, *node));
+	  max_v = std::max(max_v, system_v.point_value(var_v, *node));
+	  min_v = std::min(min_v, system_v.point_value(var_v, *node));
+	}
+    }
+  // std::cout << "Max/min u:" << max_u << ", " << min_u << std::endl;
+  // std::cout << "Max/min v:" << max_v << ", " << min_v << std::endl;
+
 }
