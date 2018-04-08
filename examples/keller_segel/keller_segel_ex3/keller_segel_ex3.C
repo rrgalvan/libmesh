@@ -265,11 +265,33 @@ int main (int argc, char ** argv)
   TransientLinearImplicitSystem & system_v =
     equation_systems.add_system<TransientLinearImplicitSystem> ("Keller-Segel.v");
 
-  // Adds the variable "u" to "Keller-Segel.u", using first-order approximation.
-  system_u.add_variable ("u", static_cast<Order>(fe_order), fe_family);
+  // Add explicit systems for projecting solution on nodal (Lagrange) elemets
+  ExplicitSystem & system_nodal_u =
+    equation_systems.add_system<ExplicitSystem> ("Keller-Segel.nodal.u");
+  ExplicitSystem & system_nodal_v =
+    equation_systems.add_system<ExplicitSystem> ("Keller-Segel.nodal.v");
 
-  // Adds the variable "v" to "Keller-Segel.v", using first-order approximation.
+  // Create equation systems for nodal projection of the solution
+  // Create an equation systems object.
+  EquationSystems equation_systems_nodal (mesh);
+
+  // // Add explicit systems for projecting solution on nodal (Lagrange) elemets
+  // TransientLinearImplicitSystem & system_nodal_u =
+  //   equation_systems_nodal.add_system<ExplicitSystem> ("Keller-Segel.nodal.u");
+  // TransientLinearImplicitSystem & system_nodal_v =
+  //   equation_systems_nodal.add_system<ExplicitSystem> ("Keller-Segel.nodal.v");
+
+
+  // Adds the variable "u" to "Keller-Segel.u", using the given order of approximation.
+  system_u.add_variable ("u", static_cast<Order>(fe_order), fe_family);
+  // Adds the variable "v" to "Keller-Segel.v", using the given order of approximation.
   system_v.add_variable ("v", static_cast<Order>(fe_order), fe_family);
+
+  // Adds the variable "u_nodal" to "Keller-Segel.u", using
+  // first-order approximation and LAGRANGE family
+  FEFamily lagrange_fe_family = Utility::string_to_enum<FEFamily>(std::string("LAGRANGE"));
+  system_nodal_u.add_variable ("u", static_cast<Order>(1), lagrange_fe_family);
+
 
   // Give the system a pointer to the matrix assembly for u,v
   // and initialization functions.
@@ -277,6 +299,9 @@ int main (int argc, char ** argv)
   system_v.attach_assemble_function (assemble_ks_v);
   system_u.attach_init_function (init_ks_u);
   system_v.attach_init_function (init_ks_v);
+
+  // Give the system a pointer to the matrix assembly for u,v
+  // and initialization functions.
 
   // Initialize the data structures for the equation system.
   equation_systems.init();
@@ -826,7 +851,7 @@ void assemble_ks_v (EquationSystems & es,
 #endif // #ifdef LIBMESH_ENABLE_AMR
 }
 
-void compute_max_min_u_v (EquationSystems & es,
+void compute_max_min_u_v_BAK (EquationSystems & es,
 			  Number& max_u, Number& min_u,
 			  Number& max_v, Number& min_v)
 {
@@ -873,5 +898,29 @@ void compute_max_min_u_v (EquationSystems & es,
     }
   // std::cout << "Max/min u:" << max_u << ", " << min_u << std::endl;
   // std::cout << "Max/min v:" << max_v << ", " << min_v << std::endl;
+
+}
+
+void compute_max_min_u_v (EquationSystems & es,
+			  Number& max_u, Number& min_u,
+			  Number& max_v, Number& min_v)
+{
+  // Get a constant reference to the mesh object.
+  const MeshBase & mesh = es.get_mesh();
+
+  // Get a reference to the Keller-Segel.u system object.
+  TransientLinearImplicitSystem & system_u =
+    es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.u");
+
+  // Get a reference to the Keller-Segel.v system object.
+  TransientLinearImplicitSystem & system_v =
+    es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.v");
+
+  unsigned int var_u = 0;
+  unsigned int var_v = 0;
+
+
+  std::cout << "Max/min u:" << max_u << ", " << min_u << std::endl;
+  std::cout << "Max/min v:" << max_v << ", " << min_v << std::endl;
 
 }
