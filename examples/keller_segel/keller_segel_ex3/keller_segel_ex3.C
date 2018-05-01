@@ -150,17 +150,12 @@ void system_print_info (EquationSystems & es, int t_step=-1,
 
   if(print_max_min)
     {
-      Number max_u, min_u, max_v, min_v;
-      compute_max_min_u_v (es, max_u, min_u, max_v, min_v);
-
       out << std::scientific
 	  << std::setprecision(9)
-	  << std::endl << "  max(u): " << max_u //system_u.solution->max()
-	  // << std::endl << "  values of u: " << *system_u.solution
-	  << ",  min(u): " << min_u //system_u.solution->min()
-	  << std::endl << "  max(v): " << max_v //system_v.solution->max()
-	  << ",  min(v): " << min_v //system_v.solution->min();
-	;
+	  << std::endl << "  max(u): " << system_u.solution->max()
+	  << ",  min(u): " << system_u.solution->min()
+	  << std::endl << "  max(v): " << system_v.solution->max()
+	  << ",  min(v): " << system_v.solution->min();
     }
 
   libMesh::out << out.str() << std::endl;
@@ -265,15 +260,15 @@ int main (int argc, char ** argv)
   TransientLinearImplicitSystem & system_v =
     equation_systems.add_system<TransientLinearImplicitSystem> ("Keller-Segel.v");
 
-  // Add explicit systems for projecting solution on nodal (Lagrange) elemets
-  ExplicitSystem & system_nodal_u =
-    equation_systems.add_system<ExplicitSystem> ("Keller-Segel.nodal.u");
-  ExplicitSystem & system_nodal_v =
-    equation_systems.add_system<ExplicitSystem> ("Keller-Segel.nodal.v");
+  // // Add explicit systems for projecting solution on nodal (Lagrange) elemets
+  // ExplicitSystem & system_nodal_u =
+  //   equation_systems.add_system<ExplicitSystem> ("Keller-Segel.nodal.u");
+  // ExplicitSystem & system_nodal_v =
+  //   equation_systems.add_system<ExplicitSystem> ("Keller-Segel.nodal.v");
 
-  // Create equation systems for nodal projection of the solution
-  // Create an equation systems object.
-  EquationSystems equation_systems_nodal (mesh);
+  // // Create equation systems for nodal projection of the solution
+  // // Create an equation systems object.
+  // EquationSystems equation_systems_nodal (mesh);
 
   // // Add explicit systems for projecting solution on nodal (Lagrange) elemets
   // TransientLinearImplicitSystem & system_nodal_u =
@@ -287,10 +282,10 @@ int main (int argc, char ** argv)
   // Adds the variable "v" to "Keller-Segel.v", using the given order of approximation.
   system_v.add_variable ("v", static_cast<Order>(fe_order), fe_family);
 
-  // Adds the variable "u_nodal" to "Keller-Segel.u", using
-  // first-order approximation and LAGRANGE family
-  FEFamily lagrange_fe_family = Utility::string_to_enum<FEFamily>(std::string("LAGRANGE"));
-  system_nodal_u.add_variable ("u", static_cast<Order>(1), lagrange_fe_family);
+  // // Adds the variable "u_nodal" to "Keller-Segel.u", using
+  // // first-order approximation and LAGRANGE family
+  // FEFamily lagrange_fe_family = Utility::string_to_enum<FEFamily>(std::string("LAGRANGE"));
+  // system_nodal_u.add_variable ("u", static_cast<Order>(1), lagrange_fe_family);
 
 
   // Give the system a pointer to the matrix assembly for u,v
