@@ -406,6 +406,9 @@ AX_SUMMARIZE_ENV
 # Each example gets a makefile
 if (test "x$enableexamples" = "xyes"); then
    AC_CONFIG_FILES([
+                examples/stokes_dg/stokes_dg_01/Makefile
+                examples/stokes_dg/stokes_dg_02/Makefile
+                examples/stokes_dg/stokes_dg_03/Makefile
                 examples/keller_segel/keller_segel_ex1/Makefile
                 examples/keller_segel/keller_segel_ex2/Makefile
                 examples/keller_segel/keller_segel_ex3/Makefile

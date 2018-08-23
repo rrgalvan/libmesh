@@ -1,4 +1,7 @@
 SUBDIRS = \
+	stokes_dg/stokes_dg_01 \
+	stokes_dg/stokes_dg_02 \
+	stokes_dg/stokes_dg_03 \
 	keller_segel/keller_segel_ex1 \
 	keller_segel/keller_segel_ex2 \
 	keller_segel/keller_segel_ex3 \
