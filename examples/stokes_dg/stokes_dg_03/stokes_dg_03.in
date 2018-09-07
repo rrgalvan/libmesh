@@ -6,7 +6,7 @@ u_order = 2
 p_order = 1
 
 # Penalty term, it ensures interior penalty formulation stability
-ip_penalty = 4
+ip_penalty = 40
 
 # Mesh refinement type: h, p, or hp
 refinement_type = h
