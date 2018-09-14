@@ -133,13 +133,14 @@ void assemble_stokesdg(EquationSystems & es,
   // FEBase::build() member dynamically creates memory we will
   // store the object as a std::unique_ptr<FEBase>.  This can be thought
   // of as a pointer that will clean up after itself.
-  std::unique_ptr<FEBase> fe_p  (FEBase::build(dim, fe_p_type));
+  std::unique_ptr<FEBase> fe_p(FEBase::build(dim, fe_p_type));
   std::unique_ptr<FEBase> fe_p_elem_face(FEBase::build(dim, fe_p_type));
   std::unique_ptr<FEBase> fe_p_neighbor_face(FEBase::build(dim, fe_p_type));
 
   // Get some parameters that we need during assembly
   const Real penalty = es.parameters.get<Real> ("penalty");
-  std::string refinement_type = es.parameters.get<std::string> ("refinement");
+  const unsigned int pressure_jumps = es.parameters.get<unsigned int> ("pressure_jumps");
+  std::string refinement_type = es.parameters.get<std::string>("refinement");
 
   // A reference to the DofMap object for this system.  The DofMap
   // object handles the index translation from node and element numbers
@@ -387,11 +388,13 @@ void assemble_stokesdg(EquationSystems & es,
 	    {
               // Pointer to the element face
               fe_u_elem_face->reinit(elem, side);
+              fe_p_elem_face->reinit(elem, side);
 
               std::unique_ptr<const Elem> elem_side (elem->build_side_ptr(side));
               // h element dimension to compute the interior penalty penalty parameter
               const unsigned int elem_b_order = static_cast<unsigned int> (fe_u_elem_face->get_order());
               const double h_elem = elem->volume()/elem_side->volume() * 1./pow(elem_b_order, 2.);
+              // const double h_elem = elem_side->volume(); // Also works, but using 5*penalty
 
               for (unsigned int qp=0; qp<qface.n_points(); qp++)
                 {
@@ -403,10 +406,10 @@ void assemble_stokesdg(EquationSystems & es,
 		  // Set v = 1 on the right boundary, 0 everywhere else
 		  const Number v_bc_value = 0.;
 
-		  for (unsigned int i=0; i<n_dofs_u; i++) // Warning: assuming n_dofs_u==n_dofs_v !!
+		  for (unsigned int i=0; i<n_dofs_u; i++)
                     {
-                      // Matrix contribution
-                      for (unsigned int j=0; j<n_dofs_u; j++) // Warning: assuming n_dofs_u==n_dofs_v !!
+                      // a) Matrix contribution
+                      for (unsigned int j=0; j<n_dofs_u; j++)
                         {
                           // stability
                           Ke_uu(i,j) += JxW_face[qp] * penalty/h_elem * phi_face[i][qp] * phi_face[j][qp];
@@ -417,13 +420,20 @@ void assemble_stokesdg(EquationSystems & es,
                             JxW_face[qp] *
                             (phi_face[i][qp] * (dphi_face[j][qp]*qface_normals[qp]) +
                              phi_face[j][qp] * (dphi_face[i][qp]*qface_normals[qp]));
-                          Ke_vv(i,j) -=
+                          Ke_vv(i,j) -= // Warning: assuming n_dofs_u==n_dofs_v !!
                             JxW_face[qp] *
                             (phi_face[i][qp] * (dphi_face[j][qp]*qface_normals[qp]) +
                              phi_face[j][qp] * (dphi_face[i][qp]*qface_normals[qp]));
                         }
+                      for (unsigned int j=0; j<n_dofs_p; j++) // Warning: assuming n_dofs_u==n_dofs_v !!
+			if(1) // WARNING, DELETE IT!!
+                        {
+		      	  // Velocity x pressure
+		      	  Ke_up(i,j) += JxW_face[qp] * ( phi_face[i][qp]*qface_normals[qp](0)*psi_face[j][qp] );
+		      	  Ke_vp(i,j) += JxW_face[qp] * ( phi_face[i][qp]*qface_normals[qp](1)*psi_face[j][qp] );
+		      	}
 
-                      // RHS contributions
+		      // b) RHS contributions
 
                       // stability
                       Fe_u(i) += JxW_face[qp] * u_bc_value * penalty/h_elem * phi_face[i][qp];
@@ -432,7 +442,26 @@ void assemble_stokesdg(EquationSystems & es,
                       // consistency
                       Fe_u(i) -= JxW_face[qp] * dphi_face[i][qp] * (u_bc_value*qface_normals[qp]);
                       Fe_v(i) -= JxW_face[qp] * dphi_face[i][qp] * (v_bc_value*qface_normals[qp]);
+
                     }
+
+		  // Pressure test functions
+
+		  if(1) // WARNING, DELETE IT!!
+		  for (unsigned int i=0; i<n_dofs_p; i++)
+		    {
+                      // a) Matrix contribution
+                      for (unsigned int j=0; j<n_dofs_u; j++)
+                        {
+		  	  // Velocity x pressure
+		  	  Ke_pu(i,j) += JxW_face[qp] * ( phi_face[j][qp]*qface_normals[qp](0)*psi_face[i][qp] );
+		  	  Ke_pv(i,j) += JxW_face[qp] * ( phi_face[j][qp]*qface_normals[qp](1)*psi_face[i][qp] );
+		  	}
+
+		      // b) RHS contributions
+                      Fe_p(i) += JxW_face[qp] * ( u_bc_value*qface_normals[qp](0)*psi_face[i][qp] );
+                      Fe_p(i) += JxW_face[qp] * ( v_bc_value*qface_normals[qp](1)*psi_face[i][qp] );
+		    }
                 }
             }
 
@@ -467,9 +496,12 @@ void assemble_stokesdg(EquationSystems & es,
                   const unsigned int neighbor_b_order = static_cast<unsigned int>(fe_u_neighbor_face->get_order());
                   const double side_order = (elem_b_order + neighbor_b_order)/2.;
                   const double h_elem = (elem->volume()/elem_side->volume()) * 1./pow(side_order,2.);
+		  // const double h_elem = elem_side->volume(); // Also works, but using 5*penalty
+		  const double h_elem_p = h_elem; // elem_side->volume();
 
-                  // The quadrature point locations on the neighbor side
+		  // The quadrature point locations on the neighbor side
                   std::vector<Point> qface_neighbor_point;
+                  std::vector<Point> qface_neighbor_point_p;
 
                   // The quadrature point locations on the element side
                   std::vector<Point > qface_point;
@@ -490,16 +522,22 @@ void assemble_stokesdg(EquationSystems & es,
                                                 side_neighbor,
                                                 qface.get_points(),
                                                 qface_neighbor_point);
-                  else
+                  else {
                     FEInterface::inverse_map (elem->dim(),
                                               fe_u->get_fe_type(),
                                               neighbor,
                                               qface_point,
                                               qface_neighbor_point);
+                    FEInterface::inverse_map (elem->dim(),
+                                              fe_p->get_fe_type(),
+                                              neighbor,
+                                              qface_point,
+                                              qface_neighbor_point_p);
+		  }
 
                   // Calculate the neighbor element shape functions at those locations
                   fe_u_neighbor_face->reinit(neighbor, &qface_neighbor_point);
-                  fe_p_neighbor_face->reinit(neighbor, &qface_neighbor_point);
+                  fe_p_neighbor_face->reinit(neighbor, &qface_neighbor_point_p);
 
                   // Get the degree of freedom indices for the
                   // neighbor.  These define where in the global
@@ -528,7 +566,6 @@ void assemble_stokesdg(EquationSystems & es,
                   Kn.resize (n_neighbor_dofs, n_neighbor_dofs);
                   Ken.resize (n_dofs, n_neighbor_dofs);
                   Kne.resize (n_neighbor_dofs, n_dofs);
-
 
 		  matrix_reposition(Kn_uu, Kn_uv, Kn_up,
 				    Kn_vu, Kn_vv, Kn_vp,
@@ -565,7 +602,7 @@ void assemble_stokesdg(EquationSystems & es,
                     {
                       // Ke Matrix. Integrate the element test function i
                       // against the element test function j
-                      for (unsigned int i=0; i<n_dofs_u; i++) // Warning: assuming n_dofs_u==n_dofs_v !!
+                      for (unsigned int i=0; i<n_dofs_u; i++)
                         {
 			  // a) velocity x velocity
 			  for (unsigned int j=0; j<n_dofs_u; j++)
@@ -575,7 +612,7 @@ void assemble_stokesdg(EquationSystems & es,
                                 0.5 * JxW_face[qp] *
                                 (phi_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) +
                                  phi_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]));
-                              Ke_vv(i,j) -=
+                              Ke_vv(i,j) -=  // Warning: assuming n_dofs_u==n_dofs_v !!
                                 0.5 * JxW_face[qp] *
                                 (phi_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) +
                                  phi_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]));
@@ -584,20 +621,45 @@ void assemble_stokesdg(EquationSystems & es,
                               Ke_uu(i,j) += JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_face[i][qp];
                               Ke_vv(i,j) += JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_face[i][qp];
                             }
-                        }
+			  // b) velocity x pressure
+			  if(1) // WARNING, DELETE IT!!
+			  for (unsigned int j=0; j<n_dofs_p; j++)
+			    {
+			      Ke_up(i,j) +=
+				0.5 * JxW_face[qp] * phi_face[i][qp]*qface_normals[qp](0)*psi_face[j][qp];
+			      Ke_vp(i,j) +=  // Warning: assuming n_dofs_u==n_dofs_v !!
+			  	0.5 * JxW_face[qp] * phi_face[i][qp]*qface_normals[qp](1)*psi_face[j][qp];
+			    }
+			}
+		      if(1) // WARNING, DELETE IT!!
+                      for (unsigned int i=0; i<n_dofs_p; i++)
+                        {
+			  // a) pressure x velocity
+			  for (unsigned int j=0; j<n_dofs_u; j++)// Warning: assuming n_dofs_u==n_dofs_v !!
+			    {
+			      Ke_pu(i,j) +=
+				0.5 * JxW_face[qp] * phi_face[j][qp]*qface_normals[qp](0)*psi_face[i][qp];
+			      Ke_pv(i,j) +=  // Warning: assuming n_dofs_u==n_dofs_v !!
+			  	0.5 * JxW_face[qp] * phi_face[j][qp]*qface_normals[qp](1)*psi_face[i][qp];
+			    }
+			  // b) pressure x pressure
+			  if(pressure_jumps) for (unsigned int j=0; j<n_dofs_p; j++)
+			    Ke_pp(i,j) +=
+			      h_elem_p * JxW_face[qp] * psi_face[j][qp]*psi_face[i][qp];
+			}
 
 		      // Kn Matrix. Integrate the neighbor test function i
 		      // against the neighbor test function j
-                      for (unsigned int i=0; i<n_neighbor_dofs_u; i++) // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+                      for (unsigned int i=0; i<n_neighbor_dofs_u; i++)
                         {
-                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++) // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++)
                             {
                               // consistency
                               Kn_uu(i,j) +=
                                 0.5 * JxW_face[qp] *
                                 (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]) +
                                  phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
-                              Kn_vv(i,j) +=
+                              Kn_vv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
                                 0.5 * JxW_face[qp] *
                                 (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]) +
                                  phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
@@ -605,10 +667,34 @@ void assemble_stokesdg(EquationSystems & es,
                               // stability
                               Kn_uu(i,j) +=
                                 JxW_face[qp] * penalty/h_elem * phi_neighbor_face[j][qp]*phi_neighbor_face[i][qp];
-                              Kn_vv(i,j) +=
+                              Kn_vv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
                                 JxW_face[qp] * penalty/h_elem * phi_neighbor_face[j][qp]*phi_neighbor_face[i][qp];
                             }
-                        }
+			  // b) velocity x pressure
+			  if(1) // WARNING, DELETE IT!!
+			  for (unsigned int j=0; j<n_neighbor_dofs_p; j++)
+			    {
+			      Kn_up(i,j) +=
+				-0.5 * JxW_face[qp] * phi_neighbor_face[i][qp]*qface_normals[qp](0)*psi_neighbor_face[j][qp];
+			      Kn_vp(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+			  	-0.5 * JxW_face[qp] * phi_neighbor_face[i][qp]*qface_normals[qp](1)*psi_neighbor_face[j][qp];
+			    }
+			}
+		      if(1) // WARNING, DELETE IT!!
+                      for (unsigned int i=0; i<n_neighbor_dofs_p; i++)
+                        {
+                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++) // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+                            {
+			      Kn_pu(i,j) +=
+				-0.5 * JxW_face[qp] * phi_neighbor_face[j][qp]*qface_normals[qp](0)*psi_neighbor_face[i][qp];
+			      Kn_pv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+			  	-0.5 * JxW_face[qp] * phi_neighbor_face[j][qp]*qface_normals[qp](1)*psi_neighbor_face[i][qp];
+			    }
+			  // b) pressure x pressure
+			  if(pressure_jumps) for (unsigned int j=0; j<n_neighbor_dofs_p; j++)
+			    Kn_pp(i,j) +=
+			      h_elem_p * JxW_face[qp] * psi_neighbor_face[j][qp]*psi_neighbor_face[i][qp];
+			}
 
                       // Kne Matrix. Integrate the neighbor test function i
                       // against the element test function j
@@ -621,7 +707,7 @@ void assemble_stokesdg(EquationSystems & es,
                                 0.5 * JxW_face[qp] *
                                 (phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]) -
                                  phi_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]));
-                              Kne_vv(i,j) +=
+                              Kne_vv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
                                 0.5 * JxW_face[qp] *
                                 (phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]) -
                                  phi_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]));
@@ -630,30 +716,79 @@ void assemble_stokesdg(EquationSystems & es,
                               Kne_uu(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_neighbor_face[i][qp];
                               Kne_vv(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_neighbor_face[i][qp];
                             }
+			  // b) velocity x pressure
+			  if(1) // WARNING, DELETE IT!!
+			  for (unsigned int j=0; j<n_dofs_p; j++)
+			    {
+			      Kne_up(i,j) +=
+				-0.5 * JxW_face[qp] * phi_neighbor_face[i][qp]*qface_normals[qp](0)*psi_face[j][qp];
+			      Kne_vp(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+			  	-0.5 * JxW_face[qp] * phi_neighbor_face[i][qp]*qface_normals[qp](1)*psi_face[j][qp];
+			    }
                         }
+		      if(1) // WARNING, DELETE IT!!
+                      for (unsigned int i=0; i<n_neighbor_dofs_p; i++)
+                        {
+                          for (unsigned int j=0; j<n_dofs_u; j++)
+                            {
+			      Kne_pu(i,j) +=
+				0.5 * JxW_face[qp] * phi_face[j][qp]*qface_normals[qp](0)*psi_neighbor_face[i][qp];
+			      Kne_pv(i,j) += // Warning: assuming n_dofs_u==n_dofs_v !!
+				0.5 * JxW_face[qp] * phi_face[j][qp]*qface_normals[qp](1)*psi_neighbor_face[i][qp];
+			    }
+			  // b) pressure x pressure
+			  if(pressure_jumps) for (unsigned int j=0; j<n_dofs_p; j++)
+			    Kne_pp(i,j) +=
+			      -h_elem_p* JxW_face[qp] * psi_face[j][qp]*psi_neighbor_face[i][qp];
+			}
 
                       // Ken Matrix. Integrate the element test function i
                       // against the neighbor test function j
-                      for (unsigned int i=0; i<n_dofs_u; i++) // Warning: assuming n_dofs_u==n_dofs_v !!
+                      for (unsigned int i=0; i<n_dofs_u; i++)
                         {
-                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++) // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++)
                             {
                               // consistency
                               Ken_uu(i,j) +=
                                 0.5 * JxW_face[qp] *
                                 (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) -
                                  phi_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
-                              Ken_vv(i,j) +=
+                              Ken_vv(i,j) +=  // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
                                 0.5 * JxW_face[qp] *
                                 (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) -
                                  phi_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
 
                               // stability
                               Ken_uu(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[i][qp]*phi_neighbor_face[j][qp];
+			      // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
                               Ken_vv(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[i][qp]*phi_neighbor_face[j][qp];
                             }
-                        }
-                    }
+			  // b) velocity x pressure
+			  if(1) // WARNING, DELETE IT!!
+			  for (unsigned int j=0; j<n_neighbor_dofs_p; j++)
+			    {
+			      Ken_up(i,j) +=
+				0.5 * JxW_face[qp] * phi_face[i][qp]*qface_normals[qp](0)*psi_neighbor_face[j][qp];
+			      Ken_vp(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+			  	0.5 * JxW_face[qp] * phi_face[i][qp]*qface_normals[qp](1)*psi_neighbor_face[j][qp];
+			    }
+			}
+		      if(1) // WARNING, DELETE IT!!
+                      for (unsigned int i=0; i<n_dofs_p; i++)
+                        {
+                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++)
+			    {
+			      Ken_pu(i,j) +=
+				-0.5 * JxW_face[qp] * phi_neighbor_face[j][qp]*qface_normals[qp](0)*psi_face[i][qp];
+			      Ken_pv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
+			  	-0.5 * JxW_face[qp] * phi_neighbor_face[j][qp]*qface_normals[qp](1)*psi_face[i][qp];
+			    }
+			  // b) pressure x pressure
+			  if(pressure_jumps) for (unsigned int j=0; j<n_neighbor_dofs_p; j++)
+			    Ken_pp(i,j) +=
+			      -h_elem_p * JxW_face[qp] * psi_neighbor_face[j][qp]*psi_face[i][qp];
+			}
+		    }
 
                   // The element and neighbor boundary matrix are now built
                   // for this side.  Add them to the global matrix
@@ -704,8 +839,11 @@ int main (int argc, char** argv)
   Order p_order                                = static_cast<Order>(input_file("p_order", 1));
   const std::string element_type               = input_file("element_type", "tensor");
   const Real penalty                           = input_file("ip_penalty", 10.);
+  const unsigned int pressure_jumps            = input_file("pressure_jumps", 0);
   const bool singularity                       = input_file("singularity", true);
   const unsigned int dim                       = input_file("dimension", 3);
+  const unsigned int nx                        = input_file("nx", 15);
+  const unsigned int ny                        = input_file("ny", 15);
 
   // Skip higher-dimensional examples on a lower-dimensional libMesh build
   libmesh_example_requires(dim <= LIBMESH_DIM, "2D/3D support");
@@ -715,7 +853,7 @@ int main (int argc, char** argv)
   // across the default MPI communicator.
   Mesh mesh(init.comm());
   MeshTools::Generation::build_square (mesh,
-                                       15, 15,
+                                       nx, ny,
                                        0., 1.,
                                        0., 1.,
                                        QUAD9);
@@ -741,6 +879,7 @@ int main (int argc, char** argv)
   equation_system.parameters.set<Real>("linear solver tolerance") = TOLERANCE * TOLERANCE;
   equation_system.parameters.set<unsigned int>("linear solver maximum iterations") = 1000;
   equation_system.parameters.set<Real>("penalty") = penalty;
+  equation_system.parameters.set<unsigned int>("pressure_jumps") = pressure_jumps;
   equation_system.parameters.set<bool>("singularity") = singularity;
   equation_system.parameters.set<std::string>("refinement") = refinement_type;
 
@@ -777,7 +916,7 @@ int main (int argc, char** argv)
   // A refinement loop.
   for (unsigned int rstep=0; rstep<adaptive_refinement_steps; ++rstep)
     {
-      libMesh::out << "  Beginning Solve " << rstep << std::endl;
+      libMesh::out << "Beginning Solve " << rstep << std::endl;
       libMesh::out << "Number of elements: " << mesh.n_elem() << std::endl;
 
       // Solve the system
