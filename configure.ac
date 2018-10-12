@@ -406,12 +406,6 @@ AX_SUMMARIZE_ENV
 # Each example gets a makefile
 if (test "x$enableexamples" = "xyes"); then
    AC_CONFIG_FILES([
-                examples/stokes_dg/stokes_dg_01/Makefile
-                examples/stokes_dg/stokes_dg_02/Makefile
-                examples/stokes_dg/stokes_dg_03/Makefile
-                examples/keller_segel/keller_segel_ex1/Makefile
-                examples/keller_segel/keller_segel_ex2/Makefile
-                examples/keller_segel/keller_segel_ex3/Makefile
                 examples/introduction/introduction_ex1/Makefile
                 examples/introduction/introduction_ex2/Makefile
                 examples/introduction/introduction_ex3/Makefile
@@ -476,6 +470,13 @@ if (test "x$enableexamples" = "xyes"); then
                 examples/vector_fe/vector_fe_ex2/Makefile
                 examples/vector_fe/vector_fe_ex3/Makefile
                 examples/vector_fe/vector_fe_ex4/Makefile
+                examples/stokes_dg/stokes_dg_01/Makefile
+                examples/stokes_dg/stokes_dg_02/Makefile
+                examples/stokes_dg/stokes_dg_03/Makefile
+                examples/keller_segel/keller_segel_ex1/Makefile
+                examples/keller_segel/keller_segel_ex2/Makefile
+                examples/keller_segel/keller_segel_ex3/Makefile
+                examples/keller_segel/keller_segel_ex4/Makefile
                 examples/Makefile
                 ])
 fi

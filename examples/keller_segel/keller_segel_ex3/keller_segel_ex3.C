@@ -62,6 +62,14 @@
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
 
+// ------------------------------------------------------------------
+// global variables
+Number global_param_C0_u; // Constant for initial_value_u
+Number global_param_C0_v; // Constant for initial_value_u
+int GViglialoro_initial_cond=0; // If 1, use initial data from G. Viglialoro' paper
+const Number uSlopeFactor = 10; // Slope of initial condition for u in critical region
+const Number vSlopeFactor = 10; // Slope of initial condition for v in critical region
+
 // This function will assemble the system matrix and right-hand-side
 // for u at each time step.  Note that since the system is linear we
 // technically do not need to assmeble the matrix at each time step,
@@ -96,9 +104,12 @@ Number initial_value_u(const Point& p,
 			const std::string&,
 			const std::string&)
 {
-  Number x=p(0), y=p(1);
-  return  1.15*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
-  // return 1;
+  const Number x=p(0), y=p(1);
+  const Number C0_u = global_param_C0_u;
+  Number ret = GViglialoro_initial_cond ?
+    C0_u*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y) :
+    C0_u*(1+tanh(uSlopeFactor*(1-x*x-y*y))); // C0_u*(1-x*x-y*y>0);
+  return ret;
 }
 
 // Initial condition for v
@@ -107,15 +118,18 @@ Number initial_value_v(const Point& p,
 			const std::string&,
 			const std::string&)
 {
-  Number x=p(0), y=p(1);
-  return 0.55*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y);
-  // return x*x;
+  const Number x=p(0), y=p(1);
+  const Number C0_v = global_param_C0_v;
+  Number ret = GViglialoro_initial_cond ?
+    C0_v*exp(-x*x-y*y)*(4-x*x)*(4-x*x)*(4-y*y)*(4-y*y) :
+    C0_v*(1+tanh(vSlopeFactor*(1-x*x-y*y)));
+  return ret;
 }
 
 // Print system current time. Also current itertiation (if print_step!=-1) and
 // max/min of u and v (if print_max_min!=0)
 void system_print_info (EquationSystems & es, int t_step=-1,
-			int print_max_min=1)
+			int print_max_min=0)
 {
   // Get a reference to the Keller-Segel system objects.
   TransientLinearImplicitSystem & system_u =
@@ -219,6 +233,11 @@ int main (int argc, char ** argv)
   const Real c_v2 = options("c_v2", 0.1);
   const Real c_v3 = options("c_v3", 1.0);
 
+  // Constants for initial conditions
+  const Real C0_u = options("C0_u", 1.15);
+  const Real C0_v = options("C0_v", 0.55);
+
+
   // Read the mesh from file.  This is the coarse mesh that will be used
   // in example 10 to demonstrate adaptive mesh refinement.  Here we will
   // simply read it in and uniformly refine it 5 times before we compute
@@ -279,8 +298,10 @@ int main (int argc, char ** argv)
 
   // Adds the variable "u" to "Keller-Segel.u", using the given order of approximation.
   system_u.add_variable ("u", static_cast<Order>(fe_order), fe_family);
+  global_param_C0_u = C0_u; // We save it as global variable because coulnd't find another way :(
   // Adds the variable "v" to "Keller-Segel.v", using the given order of approximation.
   system_v.add_variable ("v", static_cast<Order>(fe_order), fe_family);
+  global_param_C0_v = C0_v; // We save it as global variable because couldn't find another way :(
 
   // // Adds the variable "u_nodal" to "Keller-Segel.u", using
   // // first-order approximation and LAGRANGE family
@@ -337,6 +358,8 @@ int main (int argc, char ** argv)
   equation_systems.parameters.set<Real>("c_v1") = c_v1;
   equation_systems.parameters.set<Real>("c_v2") = c_v2;
   equation_systems.parameters.set<Real>("c_v3") = c_v3;
+  equation_systems.parameters.set<Real>("C0_u") = C0_u;
+  equation_systems.parameters.set<Real>("C0_v") = C0_v;
 
   // Solve the system "Keller-Segel".  This will be done by
   // looping over the specified time interval and calling the
@@ -846,76 +869,75 @@ void assemble_ks_v (EquationSystems & es,
 #endif // #ifdef LIBMESH_ENABLE_AMR
 }
 
-void compute_max_min_u_v_BAK (EquationSystems & es,
-			  Number& max_u, Number& min_u,
-			  Number& max_v, Number& min_v)
-{
-  // Get a constant reference to the mesh object.
-  const MeshBase & mesh = es.get_mesh();
+// void compute_max_min_u_v_BAK (EquationSystems & es,
+// 			  Number& max_u, Number& min_u,
+// 			  Number& max_v, Number& min_v)
+// {
+//   // Get a constant reference to the mesh object.
+//   const MeshBase & mesh = es.get_mesh();
 
-  // Get a reference to the Keller-Segel.u system object.
-  TransientLinearImplicitSystem & system_u =
-    es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.u");
+//   // Get a reference to the Keller-Segel.u system object.
+//   TransientLinearImplicitSystem & system_u =
+//     es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.u");
 
-  // Get a reference to the Keller-Segel.v system object.
-  TransientLinearImplicitSystem & system_v =
-    es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.v");
+//   // Get a reference to the Keller-Segel.v system object.
+//   TransientLinearImplicitSystem & system_v =
+//     es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.v");
 
-  unsigned int var_u = 0;
-  unsigned int var_v = 0;
+//   unsigned int var_u = 0;
+//   unsigned int var_v = 0;
 
-  // We start
-  int starting=1;
+//   // We start
+//   int starting=1;
 
-  // Now we will loop over all the elements in the mesh that live on
-  // the local processor.
-  MeshBase::const_node_iterator       nod     = mesh.active_nodes_begin();
-  const MeshBase::const_node_iterator end_nod = mesh.active_nodes_end();
+//   // Now we will loop over all the elements in the mesh that live on
+//   // the local processor.
+//   MeshBase::const_node_iterator       nod     = mesh.active_nodes_begin();
+//   const MeshBase::const_node_iterator end_nod = mesh.active_nodes_end();
 
-  for ( ; nod != end_nod; ++nod)
-    {
-      const Node* node = *nod;
-      if(starting)
-	{
-	  max_u = system_u.point_value(var_u, *node);
-	  min_u = max_u;
-	  max_v = system_v.point_value(var_v, *node);
-	  min_v = max_v;
-	  starting=0;
-	}
-      else
-	{
-	  max_u = std::max(max_u, system_u.point_value(var_u, *node));
-	  min_u = std::min(min_u, system_u.point_value(var_u, *node));
-	  max_v = std::max(max_v, system_v.point_value(var_v, *node));
-	  min_v = std::min(min_v, system_v.point_value(var_v, *node));
-	}
-    }
-  // std::cout << "Max/min u:" << max_u << ", " << min_u << std::endl;
-  // std::cout << "Max/min v:" << max_v << ", " << min_v << std::endl;
+//   for ( ; nod != end_nod; ++nod)
+//     {
+//       const Node* node = *nod;
+//       if(starting)
+// 	{
+// 	  max_u = system_u.point_value(var_u, *node);
+// 	  min_u = max_u;
+// 	  max_v = system_v.point_value(var_v, *node);
+// 	  min_v = max_v;
+// 	  starting=0;
+// 	}
+//       else
+// 	{
+// 	  max_u = std::max(max_u, system_u.point_value(var_u, *node));
+// 	  min_u = std::min(min_u, system_u.point_value(var_u, *node));
+// 	  max_v = std::max(max_v, system_v.point_value(var_v, *node));
+// 	  min_v = std::min(min_v, system_v.point_value(var_v, *node));
+// 	}
+//     }
+//   // std::cout << "Max/min u:" << max_u << ", " << min_u << std::endl;
+//   // std::cout << "Max/min v:" << max_v << ", " << min_v << std::endl;
 
-}
+// }
 
-void compute_max_min_u_v (EquationSystems & es,
-			  Number& max_u, Number& min_u,
-			  Number& max_v, Number& min_v)
-{
-  // Get a constant reference to the mesh object.
-  const MeshBase & mesh = es.get_mesh();
+// void compute_max_min_u_v (EquationSystems & es,
+// 			  Number& max_u, Number& min_u,
+// 			  Number& max_v, Number& min_v)
+// {
+//   // Get a constant reference to the mesh object.
+//   const MeshBase & mesh = es.get_mesh();
 
-  // Get a reference to the Keller-Segel.u system object.
-  TransientLinearImplicitSystem & system_u =
-    es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.u");
+//   // Get a reference to the Keller-Segel.u system object.
+//   TransientLinearImplicitSystem & system_u =
+//     es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.u");
 
-  // Get a reference to the Keller-Segel.v system object.
-  TransientLinearImplicitSystem & system_v =
-    es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.v");
+//   // Get a reference to the Keller-Segel.v system object.
+//   TransientLinearImplicitSystem & system_v =
+//     es.get_system<TransientLinearImplicitSystem> ("Keller-Segel.v");
 
-  unsigned int var_u = 0;
-  unsigned int var_v = 0;
+//   unsigned int var_u = 0;
+//   unsigned int var_v = 0;
 
+//   std::cout << "Max/min u:" << max_u << ", " << min_u << std::endl;
+//   std::cout << "Max/min v:" << max_v << ", " << min_v << std::endl;
 
-  std::cout << "Max/min u:" << max_u << ", " << min_u << std::endl;
-  std::cout << "Max/min v:" << max_v << ", " << min_v << std::endl;
-
-}
+// }
