@@ -1,10 +1,4 @@
 SUBDIRS = \
-	stokes_dg/stokes_dg_01 \
-	stokes_dg/stokes_dg_02 \
-	stokes_dg/stokes_dg_03 \
-	keller_segel/keller_segel_ex1 \
-	keller_segel/keller_segel_ex2 \
-	keller_segel/keller_segel_ex3 \
 	introduction/introduction_ex1 \
 	introduction/introduction_ex2 \
 	introduction/introduction_ex3 \
@@ -68,7 +62,14 @@ SUBDIRS = \
 	vector_fe/vector_fe_ex1 \
 	vector_fe/vector_fe_ex2 \
 	vector_fe/vector_fe_ex3 \
-        vector_fe/vector_fe_ex4
+        vector_fe/vector_fe_ex4 \
+	keller_segel/keller_segel_ex1 \
+	keller_segel/keller_segel_ex2 \
+	keller_segel/keller_segel_ex3 \
+	stokes_dg/stokes_dg_01 \
+	stokes_dg/stokes_dg_02 \
+	stokes_dg/stokes_dg_03 \
+	stokes_dg/stokes_dg_04 
 
 AUTOMAKE_OPTIONS = subdir-objects
 
