@@ -88,6 +88,302 @@ void matrix_reposition(
   Kpp.reposition (p_first_row, p_first_col, n_rows_p, n_cols_p);
 }
 
+void add_term_sip_consistency( int qp, const std::vector<Real> & JxW_face,
+			       DenseSubMatrix<Number>& K_ee,
+			       DenseSubMatrix<Number>& K_en,
+			       DenseSubMatrix<Number>& K_ne,
+			       DenseSubMatrix<Number>& K_nn,
+			       const std::vector<std::vector<Real>>& phi_face,
+			       const std::vector<std::vector<RealGradient>>& dphi_face,
+			       const std::vector<std::vector<Real>>& phi_neighbor_face,
+			       const std::vector<std::vector<RealGradient>>& dphi_neighbor_face,
+			       const std::vector<Point> & qface_normals
+			       )
+{
+  unsigned int n_element_dofs = K_ee.m();
+  unsigned int n_neighbor_dofs = K_nn.m();
+  assert( K_ee.n() == n_element_dofs ); // Square matrices
+  assert( K_nn.n() == n_neighbor_dofs );
+
+  assert( K_en.m() == n_element_dofs );
+  assert( K_en.n() == n_neighbor_dofs );
+
+  assert( K_ne.m() == n_neighbor_dofs );
+  assert( K_en.n() == n_element_dofs );
+
+  // Loop in element test function, i
+  for (unsigned int i=0; i<n_element_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_dofs; j++)
+	{
+	  K_ee(i,j) -=
+	    0.5 * JxW_face[qp] *
+	    (phi_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) +
+	     phi_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]));
+	}
+      // Loop in neighbor unnowns, j
+      for (unsigned int j=0; j<n_neighbor_dofs; j++)
+	{
+	  K_en(i,j) +=
+	    0.5 * JxW_face[qp] *
+	    (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) -
+	     phi_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
+	}
+    }
+  // Loop in neighbor test function, i
+  for (unsigned int i=0; i<n_neighbor_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_dofs; j++)
+	{
+	  K_ne(i,j) +=
+	    0.5 * JxW_face[qp] *
+	    (phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]) -
+	     phi_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]));
+	}
+      // Loop in neighbor unnowns, j
+      for (unsigned int j=0; j<n_neighbor_dofs; j++)
+	{
+	  K_nn(i,j) +=
+	    0.5 * JxW_face[qp] *
+	    (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]) +
+	     phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
+	}
+    }
+}  /* End add_term_sip_consistency */
+
+void add_term_sip_penalty( int qp, const std::vector<Real> & JxW_face,
+			   DenseSubMatrix<Number>& K_ee,
+			   DenseSubMatrix<Number>& K_en,
+			   DenseSubMatrix<Number>& K_ne,
+			   DenseSubMatrix<Number>& K_nn,
+			   const std::vector<std::vector<Real>>& phi_face,
+			   const std::vector<std::vector<Real>>& phi_neighbor_face,
+			   Real penalty, double h_elem
+			   )
+{
+  unsigned int n_element_dofs = K_ee.m();
+  unsigned int n_neighbor_dofs = K_nn.m();
+  assert( K_ee.n() == n_element_dofs ); // Square matrices
+  assert( K_nn.n() == n_neighbor_dofs );
+
+  assert( K_en.m() == n_element_dofs );
+  assert( K_en.n() == n_neighbor_dofs );
+  assert( K_ne.m() == n_neighbor_dofs );
+  assert( K_en.n() == n_element_dofs );
+
+  // Loop in element test function, i
+  for (unsigned int i=0; i<n_element_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_dofs; j++)
+	{
+	  K_ee(i,j) += JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_face[i][qp];
+	}
+      // Loop in neighbor unnowns, j
+      for (unsigned int j=0; j<n_neighbor_dofs; j++)
+	{
+	  K_en(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[i][qp]*phi_neighbor_face[j][qp];
+	}
+    }
+  // Loop in neighbor test function, i
+  for (unsigned int i=0; i<n_neighbor_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_dofs; j++)
+	{
+	  K_ne(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_neighbor_face[i][qp];
+	}
+      // Loop in neighbor unnowns, j
+      for (unsigned int j=0; j<n_neighbor_dofs; j++)
+	{
+	  K_nn(i,j) +=  JxW_face[qp] * penalty/h_elem * phi_neighbor_face[j][qp]*phi_neighbor_face[i][qp];
+	}
+    }
+}  /* End add_term */
+
+
+void add_term_velocity_pressure_coupling( int qp, const std::vector<Real> & JxW_face,
+					  DenseSubMatrix<Number>& K_ee,
+					  DenseSubMatrix<Number>& K_en,
+					  DenseSubMatrix<Number>& K_ne,
+					  DenseSubMatrix<Number>& K_nn,
+					  const std::vector<std::vector<Real>>& phi_face,
+					  const std::vector<std::vector<Real>>& phi_neighbor_face,
+					  const std::vector<std::vector<Real>>& psi_face,
+					  const std::vector<std::vector<Real>>& psi_neighbor_face,
+					  const std::vector<Point> & qface_normals,
+					  unsigned int velocity_component
+					  )
+{
+  // Number of dofs for test function and unknown in current element
+  unsigned int n_element_test_dofs    = K_ee.m();
+  unsigned int n_element_unknown_dofs = K_ee.n();
+  // Number of dofs for test function and unknown in neighbor element
+  unsigned int n_neighbor_test_dofs    = K_nn.m();
+  unsigned int n_neighbor_unknown_dofs = K_nn.n();
+
+  assert( K_en.m() == n_element_test_dofs );
+  assert( K_en.n() == n_neighbor_unknown_dofs );
+  assert( K_ne.m() == n_neighbor_test_dofs );
+  assert( K_en.n() == n_element_unknown_dofs );
+
+  assert(n_element_test_dofs == phi_face.size());
+  assert(n_element_unknown_dofs == psi_face.size());
+  assert(n_neighbor_test_dofs == phi_neighbor_face.size());
+  assert(n_neighbor_unknown_dofs == psi_neighbor_face.size());
+
+ // Loop in element test functions, i
+  for (unsigned int i=0; i<n_element_test_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_unknown_dofs; j++)
+	{
+	  K_ee(i,j) += 0.5 * JxW_face[qp] *
+	    phi_face[i][qp]*qface_normals[qp](velocity_component)*psi_face[j][qp];
+	}
+      // Loop in neighbor unnowns, j
+      for (unsigned int j=0; j<n_neighbor_unknown_dofs; j++)
+	{
+	  K_en(i,j) += 0.5 * JxW_face[qp] *
+	    phi_face[i][qp]*qface_normals[qp](velocity_component)*psi_neighbor_face[j][qp];
+	}
+    }
+  // Loop in neighbor test functions, i
+  for (unsigned int i=0; i<n_neighbor_test_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_unknown_dofs; j++)
+	{
+	  K_ne(i,j) -= 0.5 * JxW_face[qp] *
+	    phi_neighbor_face[i][qp]*qface_normals[qp](velocity_component)*psi_face[j][qp];
+	}
+      // Loop in neighbor unkowns, j
+      for (unsigned int j=0; j<n_neighbor_unknown_dofs; j++)
+	{
+	  K_nn(i,j) -= 0.5 * JxW_face[qp] *
+	    phi_neighbor_face[i][qp]*qface_normals[qp](velocity_component)*psi_neighbor_face[j][qp];
+	}
+    }
+}  /* End add_term */
+
+void add_term_pressure_velocity_coupling( int qp, const std::vector<Real> & JxW_face,
+					  DenseSubMatrix<Number>& K_ee,
+					  DenseSubMatrix<Number>& K_en,
+					  DenseSubMatrix<Number>& K_ne,
+					  DenseSubMatrix<Number>& K_nn,
+					  const std::vector<std::vector<Real>>& phi_face,
+					  const std::vector<std::vector<Real>>& phi_neighbor_face,
+					  const std::vector<std::vector<Real>>& psi_face,
+					  const std::vector<std::vector<Real>>& psi_neighbor_face,
+					  const std::vector<Point> & qface_normals,
+					  unsigned int velocity_component
+					  )
+{
+  // Number of dofs for test function and unknown in current element
+  unsigned int n_element_test_dofs    = K_ee.m();
+  unsigned int n_element_unknown_dofs = K_ee.n();
+  // Number of dofs for test function and unknown in neighbor element
+  unsigned int n_neighbor_test_dofs    = K_nn.m();
+  unsigned int n_neighbor_unknown_dofs = K_nn.n();
+
+  assert( K_en.m() == n_element_test_dofs );
+  assert( K_en.n() == n_neighbor_unknown_dofs );
+  assert( K_ne.m() == n_neighbor_test_dofs );
+  assert( K_en.n() == n_element_unknown_dofs );
+
+  assert(n_element_test_dofs == psi_face.size());
+  assert(n_element_unknown_dofs == phi_face.size());
+  assert(n_neighbor_test_dofs == psi_neighbor_face.size());
+  assert(n_neighbor_unknown_dofs == phi_neighbor_face.size());
+
+  // Loop in element test functions, i
+  for (unsigned int i=0; i<n_element_test_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_unknown_dofs; j++)
+	{
+	  K_ee(i,j) += 0.5 * JxW_face[qp] *
+	    phi_face[j][qp]*qface_normals[qp](velocity_component)*psi_face[i][qp];
+	}
+      // Loop in neighbor unnowns, j
+      for (unsigned int j=0; j<n_neighbor_unknown_dofs; j++)
+	{
+	  K_en(i,j) -= 0.5 * JxW_face[qp] *
+	    phi_neighbor_face[j][qp]*qface_normals[qp](velocity_component)*psi_face[i][qp];
+	}
+    }
+  // Loop in neighbor test functions, i
+  for (unsigned int i=0; i<n_neighbor_test_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_unknown_dofs; j++)
+	{
+	  K_ne(i,j) += 0.5 * JxW_face[qp] *
+	    phi_face[j][qp]*qface_normals[qp](velocity_component)*psi_neighbor_face[i][qp];
+	}
+      // Loop in neighbor unkowns, j
+      for (unsigned int j=0; j<n_neighbor_unknown_dofs; j++)
+	{
+	  K_nn(i,j) -= 0.5 * JxW_face[qp] *
+	    phi_neighbor_face[j][qp]*qface_normals[qp](velocity_component)*psi_neighbor_face[i][qp];
+	}
+    }
+}  /* End add_term */
+
+
+void add_term_pressure_jumps( int qp, const std::vector<Real> & JxW_face,
+			      DenseSubMatrix<Number>& K_ee,
+			      DenseSubMatrix<Number>& K_en,
+			      DenseSubMatrix<Number>& K_ne,
+			      DenseSubMatrix<Number>& K_nn,
+			      const std::vector<std::vector<Real>>& psi_face,
+			      const std::vector<std::vector<Real>>& psi_neighbor_face,
+			      double h_elem
+			      )
+{
+  unsigned int n_element_dofs = K_ee.m();
+  unsigned int n_neighbor_dofs = K_nn.m();
+  assert( K_ee.n() == n_element_dofs ); // Square matrices
+  assert( K_nn.n() == n_neighbor_dofs );
+
+  assert( K_en.m() == n_element_dofs );
+  assert( K_en.n() == n_neighbor_dofs );
+  assert( K_ne.m() == n_neighbor_dofs );
+  assert( K_en.n() == n_element_dofs );
+
+  // Loop in element test function, i
+  for (unsigned int i=0; i<n_element_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_dofs; j++)
+	{
+	  K_ee(i,j) += h_elem*JxW_face[qp] * psi_face[j][qp]*psi_face[i][qp];
+	}
+      // Loop in neighbor unnowns, j
+      for (unsigned int j=0; j<n_neighbor_dofs; j++)
+	{
+	  K_en(i,j) -= h_elem*JxW_face[qp] * psi_neighbor_face[j][qp]*psi_face[i][qp];
+	}
+    }
+  // Loop in neighbor test function, i
+  for (unsigned int i=0; i<n_neighbor_dofs; i++)
+    {
+      // Loop in element unnowns, j
+      for (unsigned int j=0; j<n_element_dofs; j++)
+	{
+	  K_ne(i,j) -= h_elem*JxW_face[qp] * psi_face[j][qp]*psi_neighbor_face[i][qp];
+	}
+      // Loop in neighbor unnowns, j
+      for (unsigned int j=0; j<n_neighbor_dofs; j++)
+	{
+	  K_nn(i,j) += h_elem*JxW_face[qp] * psi_neighbor_face[j][qp]*psi_neighbor_face[i][qp];
+	}
+    }
+}  /* End add_term */
+
+
 // We now define the matrix assembly function for the
 // Laplace system.  We need to first compute element volume
 // matrices, and then take into account the boundary
@@ -393,7 +689,7 @@ void assemble_stokesdg(EquationSystems & es,
               std::unique_ptr<const Elem> elem_side (elem->build_side_ptr(side));
               // h element dimension to compute the interior penalty penalty parameter
               const unsigned int elem_b_order = static_cast<unsigned int> (fe_u_elem_face->get_order());
-              const Number h_elem = elem->volume()/elem_side->volume() * 1./pow(elem_b_order, 2.);
+              const double h_elem = elem->volume()/elem_side->volume() * 1./pow(elem_b_order, 2.);
               // const double h_elem = elem_side->volume(); // Also works, but using 5*penalty
 
               for (unsigned int qp=0; qp<qface.n_points(); qp++)
@@ -600,194 +896,68 @@ void assemble_stokesdg(EquationSystems & es,
 		  //
                   for (unsigned int qp=0; qp<qface.n_points(); qp++)
                     {
-                      // 1.- Ke Matrix. Integrate the element test function i
-                      // against the element test function j
-                      for (unsigned int i=0; i<n_dofs_u; i++)
-                        {
-			  // a) velocity x velocity
-			  for (unsigned int j=0; j<n_dofs_u; j++)
-                            {
-                              // consistency
-                              Ke_uu(i,j) -=
-                                0.5 * JxW_face[qp] *
-                                (phi_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) +
-                                 phi_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]));
-                              Ke_vv(i,j) -=  // Warning: assuming n_dofs_u==n_dofs_v !!
-                                0.5 * JxW_face[qp] *
-                                (phi_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) +
-                                 phi_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]));
 
-                              // stability
-                              Ke_uu(i,j) += JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_face[i][qp];
-                              Ke_vv(i,j) += JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_face[i][qp];
-                            }
-			  // b) velocity x pressure
-			  if(1) // WARNING, DELETE IT!!
-			  for (unsigned int j=0; j<n_dofs_p; j++)
-			    {
-			      Ke_up(i,j) +=
-				0.5 * JxW_face[qp] * phi_face[i][qp]*qface_normals[qp](0)*psi_face[j][qp];
-			      Ke_vp(i,j) +=  // Warning: assuming n_dofs_u==n_dofs_v !!
-			  	0.5 * JxW_face[qp] * phi_face[i][qp]*qface_normals[qp](1)*psi_face[j][qp];
-			    }
-			}
-		      if(1) // WARNING, DELETE IT!!
-                      for (unsigned int i=0; i<n_dofs_p; i++)
-                        {
-			  // a) pressure x velocity
-			  for (unsigned int j=0; j<n_dofs_u; j++)// Warning: assuming n_dofs_u==n_dofs_v !!
-			    {
-			      Ke_pu(i,j) +=
-				0.5 * JxW_face[qp] * phi_face[j][qp]*qface_normals[qp](0)*psi_face[i][qp];
-			      Ke_pv(i,j) +=  // Warning: assuming n_dofs_u==n_dofs_v !!
-			  	0.5 * JxW_face[qp] * phi_face[j][qp]*qface_normals[qp](1)*psi_face[i][qp];
-			    }
-			  // b) pressure x pressure
-			  if(pressure_jumps) for (unsigned int j=0; j<n_dofs_p; j++)
-			    Ke_pp(i,j) +=
-			      h_elem_p * JxW_face[qp] * psi_face[j][qp]*psi_face[i][qp];
-			}
+		      // Add SIP consistency for u
+		      add_term_sip_consistency(qp, JxW_face,
+					       Ke_uu, Ken_uu, Kne_uu, Kn_uu,
+					       phi_face, dphi_face,
+					       phi_neighbor_face, dphi_neighbor_face,
+					       qface_normals);
 
-		      // 2.- Kn Matrix. Integrate the neighbor test function i
-		      // against the neighbor test function j
-                      for (unsigned int i=0; i<n_neighbor_dofs_u; i++)
-                        {
-                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++)
-                            {
-                              // consistency
-                              Kn_uu(i,j) +=
-                                0.5 * JxW_face[qp] *
-                                (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]) +
-                                 phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
-                              Kn_vv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-                                0.5 * JxW_face[qp] *
-                                (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]) +
-                                 phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
+		      // Add SIP consistency for v
+		      add_term_sip_consistency(qp, JxW_face,
+					       Ke_vv, Ken_vv, Kne_vv, Kn_vv,
+					       phi_face, dphi_face,
+					       phi_neighbor_face, dphi_neighbor_face,
+					       qface_normals);
 
-                              // stability
-                              Kn_uu(i,j) +=
-                                JxW_face[qp] * penalty/h_elem * phi_neighbor_face[j][qp]*phi_neighbor_face[i][qp];
-                              Kn_vv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-                                JxW_face[qp] * penalty/h_elem * phi_neighbor_face[j][qp]*phi_neighbor_face[i][qp];
-                            }
-			  // b) velocity x pressure
-			  if(1) // WARNING, DELETE IT!!
-			  for (unsigned int j=0; j<n_neighbor_dofs_p; j++)
-			    {
-			      Kn_up(i,j) +=
-				-0.5 * JxW_face[qp] * phi_neighbor_face[i][qp]*qface_normals[qp](0)*psi_neighbor_face[j][qp];
-			      Kn_vp(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-			  	-0.5 * JxW_face[qp] * phi_neighbor_face[i][qp]*qface_normals[qp](1)*psi_neighbor_face[j][qp];
-			    }
-			}
-		      if(1) // WARNING, DELETE IT!!
-                      for (unsigned int i=0; i<n_neighbor_dofs_p; i++)
-                        {
-                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++) // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-                            {
-			      Kn_pu(i,j) +=
-				-0.5 * JxW_face[qp] * phi_neighbor_face[j][qp]*qface_normals[qp](0)*psi_neighbor_face[i][qp];
-			      Kn_pv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-			  	-0.5 * JxW_face[qp] * phi_neighbor_face[j][qp]*qface_normals[qp](1)*psi_neighbor_face[i][qp];
-			    }
-			  // b) pressure x pressure
-			  if(pressure_jumps) for (unsigned int j=0; j<n_neighbor_dofs_p; j++)
-			    Kn_pp(i,j) +=
-			      h_elem_p * JxW_face[qp] * psi_neighbor_face[j][qp]*psi_neighbor_face[i][qp];
-			}
+		      // Add SIP penalty for u
+		      add_term_sip_penalty(qp, JxW_face,
+					   Ke_uu, Ken_uu, Kne_uu, Kn_uu,
+					   phi_face, phi_neighbor_face,
+					   penalty, h_elem);
 
-                      // 3.- Kne Matrix. Integrate the neighbor test function i
-                      // against the element test function j
-                      for (unsigned int i=0; i<n_neighbor_dofs_u; i++) // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-                        {
-                          for (unsigned int j=0; j<n_dofs_u; j++) // Warning: assuming n_dofs_u==n_dofs_v !!
-                            {
-                              // consistency
-                              Kne_uu(i,j) +=
-                                0.5 * JxW_face[qp] *
-                                (phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]) -
-                                 phi_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]));
-                              Kne_vv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-                                0.5 * JxW_face[qp] *
-                                (phi_neighbor_face[i][qp]*(qface_normals[qp]*dphi_face[j][qp]) -
-                                 phi_face[j][qp]*(qface_normals[qp]*dphi_neighbor_face[i][qp]));
+		      // Add SIP penalty for v
+		      add_term_sip_penalty(qp, JxW_face,
+					   Ke_vv, Ken_vv, Kne_vv, Kn_vv,
+					   phi_face, phi_neighbor_face,
+					   penalty, h_elem);
 
-                              // stability
-                              Kne_uu(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_neighbor_face[i][qp];
-                              Kne_vv(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[j][qp]*phi_neighbor_face[i][qp];
-                            }
-			  // b) velocity x pressure
-			  if(1) // WARNING, DELETE IT!!
-			  for (unsigned int j=0; j<n_dofs_p; j++)
-			    {
-			      Kne_up(i,j) +=
-				-0.5 * JxW_face[qp] * phi_neighbor_face[i][qp]*qface_normals[qp](0)*psi_face[j][qp];
-			      Kne_vp(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-			  	-0.5 * JxW_face[qp] * phi_neighbor_face[i][qp]*qface_normals[qp](1)*psi_face[j][qp];
-			    }
-                        }
-		      if(1) // WARNING, DELETE IT!!
-                      for (unsigned int i=0; i<n_neighbor_dofs_p; i++)
-                        {
-                          for (unsigned int j=0; j<n_dofs_u; j++)
-                            {
-			      Kne_pu(i,j) +=
-				0.5 * JxW_face[qp] * phi_face[j][qp]*qface_normals[qp](0)*psi_neighbor_face[i][qp];
-			      Kne_pv(i,j) += // Warning: assuming n_dofs_u==n_dofs_v !!
-				0.5 * JxW_face[qp] * phi_face[j][qp]*qface_normals[qp](1)*psi_neighbor_face[i][qp];
-			    }
-			  // b) pressure x pressure
-			  if(pressure_jumps) for (unsigned int j=0; j<n_dofs_p; j++)
-			    Kne_pp(i,j) +=
-			      -h_elem_p* JxW_face[qp] * psi_face[j][qp]*psi_neighbor_face[i][qp];
-			}
+		      // Add SIP velocity/pressure coupling u*p (test * unknown)
+		      add_term_velocity_pressure_coupling(qp, JxW_face,
+							  Ke_up, Ken_up, Kne_up, Kn_up,
+							  phi_face, phi_neighbor_face,
+							  psi_face, psi_neighbor_face,
+							  qface_normals, 0);
 
-                      // 4.- Ken Matrix. Integrate the element test function i
-                      // against the neighbor test function j
-                      for (unsigned int i=0; i<n_dofs_u; i++)
-                        {
-                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++)
-                            {
-                              // consistency
-                              Ken_uu(i,j) +=
-                                0.5 * JxW_face[qp] *
-                                (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) -
-                                 phi_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
-                              Ken_vv(i,j) +=  // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-                                0.5 * JxW_face[qp] *
-                                (phi_neighbor_face[j][qp]*(qface_normals[qp]*dphi_face[i][qp]) -
-                                 phi_face[i][qp]*(qface_normals[qp]*dphi_neighbor_face[j][qp]));
+		      // Add SIP velocity/pressure coupling v*p (test * unknown)
+		      add_term_velocity_pressure_coupling(qp, JxW_face,
+							  Ke_vp, Ken_vp, Kne_vp, Kn_vp,
+		      					  phi_face, phi_neighbor_face,
+		      					  psi_face, psi_neighbor_face,
+		      					  qface_normals, 1);
 
-                              // stability
-                              Ken_uu(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[i][qp]*phi_neighbor_face[j][qp];
-			      // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-                              Ken_vv(i,j) -= JxW_face[qp] * penalty/h_elem * phi_face[i][qp]*phi_neighbor_face[j][qp];
-                            }
-			  // b) velocity x pressure
-			  if(1) // WARNING, DELETE IT!!
-			  for (unsigned int j=0; j<n_neighbor_dofs_p; j++)
-			    {
-			      Ken_up(i,j) +=
-				0.5 * JxW_face[qp] * phi_face[i][qp]*qface_normals[qp](0)*psi_neighbor_face[j][qp];
-			      Ken_vp(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-			  	0.5 * JxW_face[qp] * phi_face[i][qp]*qface_normals[qp](1)*psi_neighbor_face[j][qp];
-			    }
-			}
-		      if(1) // WARNING, DELETE IT!!
-                      for (unsigned int i=0; i<n_dofs_p; i++)
-                        {
-                          for (unsigned int j=0; j<n_neighbor_dofs_u; j++)
-			    {
-			      Ken_pu(i,j) +=
-				-0.5 * JxW_face[qp] * phi_neighbor_face[j][qp]*qface_normals[qp](0)*psi_face[i][qp];
-			      Ken_pv(i,j) += // Warning: assuming n_neighbor_dofs_u==n_neighbor_dofs_v !!
-			  	-0.5 * JxW_face[qp] * phi_neighbor_face[j][qp]*qface_normals[qp](1)*psi_face[i][qp];
-			    }
-			  // b) pressure x pressure
-			  if(pressure_jumps) for (unsigned int j=0; j<n_neighbor_dofs_p; j++)
-			    Ken_pp(i,j) +=
-			      -h_elem_p * JxW_face[qp] * psi_neighbor_face[j][qp]*psi_face[i][qp];
-			}
+		      // Add SIP pressure/velocity coupling p*u (test * unknown)
+		      add_term_pressure_velocity_coupling(qp, JxW_face,
+		      					  Ke_pu, Ken_pu, Kne_pu, Kn_pu,
+		      					  phi_face, phi_neighbor_face,
+		      					  psi_face, psi_neighbor_face,
+		      					  qface_normals, 0);
+
+		      // Add SIP pressure/velocity coupling p*u (test * unknown)
+		      add_term_pressure_velocity_coupling(qp, JxW_face,
+		      					  Ke_pv, Ken_pv, Kne_pv, Kn_pv,
+		      					  phi_face, phi_neighbor_face,
+		      					  psi_face, psi_neighbor_face,
+		      					  qface_normals, 1);
+
+		      // Add pressure stabilizing term
+		      if(pressure_jumps)
+			add_term_pressure_jumps(qp, JxW_face,
+						Ke_pp, Ken_pp, Kne_pp, Kn_pp,
+						psi_face, psi_neighbor_face,
+						h_elem_p);
+
 		    }
 
                   // The element and neighbor boundary matrix are now built
@@ -826,7 +996,7 @@ int main (int argc, char** argv)
 #else
 
   //Parse the input file
-  GetPot input_file("stokes_dg_03.in");
+  GetPot input_file("stokes_dg_04.in");
 
   //Read in parameters from the input file
   const unsigned int adaptive_refinement_steps = input_file("max_adaptive_r_steps", 3);
